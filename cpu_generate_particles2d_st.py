@@ -1,3 +1,4 @@
+import math
 import os
 import time
 import datetime
@@ -12,6 +13,19 @@ import plotly.express as px
 from stqdm import stqdm
 from vispy import scene
 from vispy.io import write_png
+
+
+def toroidal_distance_cpu(length, p1, p2):
+    dx = abs(p2[0] - p1[0])
+    dy = abs(p2[1] - p1[1])
+
+    if dx > length / 2:
+        dx = length - dx
+    if dy > length / 2:
+        dy = length - dy
+
+    return math.sqrt(dx ** 2 + dy ** 2)
+
 
 @ti.data_oriented
 class MetropolisHastings:
@@ -40,6 +54,18 @@ class MetropolisHastings:
                 self.init_particles[trial_idx, particle_idx] = ti.Vector([ti.random(dtype=ti.f32), ti.random(dtype=ti.f32)])
                 self.mh_particles[trial_idx, particle_idx] = self.init_particles[trial_idx, particle_idx]
 
+    @ti.func
+    def toroidal_distance(self, length, p1, p2):
+        dx = abs(p2[0] - p1[0])
+        dy = abs(p2[1] - p1[1])
+
+        if dx > length / 2:
+            dx = length - dx
+        if dy > length / 2:
+            dy = length - dy
+
+        return ti.sqrt(dx ** 2 + dy ** 2)
+
     @ti.kernel
     def compute_mh(self):
         for i, j in ti.ndrange(self.num_of_independent_trials, self.num_of_particles):
@@ -61,7 +87,7 @@ class MetropolisHastings:
                 for l in range(k + 1, self.num_of_particles):
                     x1 = self.proposed_particles[i, k]
                     x2 = self.proposed_particles[i, l]
-                    r = ti.sqrt((x1[0] - x2[0]) ** 2 + (x1[1] - x2[1]) ** 2)
+                    r = self.toroidal_distance(1.0, x1, x2)
                     kappa2_37_sum += self.c * ti.exp(-1 * r / self.s) * (ti.sin(self.a * (r / self.s - self.b)) - c_ab_val * 0.5)
 
             acceptance_ratio = 1 / (1 ** self.num_of_particles) + 1 / (1 ** (self.num_of_particles - 2)) * kappa2_37_sum
@@ -79,12 +105,13 @@ def initialize_parameters():
     proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 1.0, 0.1)
     num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 1000000, 100)
     num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 1000000, 10)
+    each_particle = st.sidebar.checkbox("Visualize Each Particle Index", False)
     save_image = st.sidebar.checkbox("Save Image", False)
-    return num_of_particles, a, b, c, s, proposal_std, num_of_independent_trials, num_of_iterations_for_each_trial, save_image
+    return num_of_particles, a, b, c, s, proposal_std, num_of_independent_trials, num_of_iterations_for_each_trial, each_particle, save_image
 
 def perform_calculations(params):
     """Perform the Metropolis-Hastings calculations and return the results."""
-    num_of_particles, a, b, c, s, proposal_std, num_of_independent_trials, num_of_iterations_for_each_trial, _ = params
+    num_of_particles, a, b, c, s, proposal_std, num_of_independent_trials, num_of_iterations_for_each_trial, _, _ = params
     MH = MetropolisHastings(num_of_particles, a, b, c, s, proposal_std, num_of_independent_trials)
     MH.initialize_particles()
 
@@ -156,7 +183,7 @@ def draw_particles(data, colors, filename, size=(1000, 1000), save=False):
 
 def visualize_results(params, initial_particles, colors, particles):
     """Visualize and optionally save the results."""
-    num_of_particles, _, _, _, _, _, num_of_independent_trials, num_of_iterations_for_each_trial, save_image = params
+    num_of_particles, _, _, _, _, _, num_of_independent_trials, num_of_iterations_for_each_trial, each_particle, save_image = params
 
     # Visualize all initial particles
     data_all = np.concatenate(initial_particles, axis=0)
@@ -181,12 +208,27 @@ def visualize_results(params, initial_particles, colors, particles):
     st.image(image_all)
 
     # Visualize each particle index
-    for i in range(num_of_particles):
-        data_index = np.array([chain[i] for chain in particles])
-        colors_index = colors_all[i::num_of_particles]
-        filename = f'particles_index_{i}_trial_count_{num_of_independent_trials}_mh_steps_{num_of_iterations_for_each_trial}'
-        image_index = draw_particles(data_index, colors_index, filename, save=save_image)
-        st.image(image_index)
+    if each_particle:
+        for i in range(num_of_particles):
+            data_index = np.array([chain[i] for chain in particles])
+            colors_index = colors_all[i::num_of_particles]
+            filename = f'particles_index_{i}_trial_count_{num_of_independent_trials}_mh_steps_{num_of_iterations_for_each_trial}'
+            image_index = draw_particles(data_index, colors_index, filename, save=save_image)
+            st.image(image_index)
+
+    # 2粒子間の距離を計算
+    distances = []
+    for i in range(num_of_independent_trials):
+        dist = toroidal_distance_cpu(1.0, particles[i][0], particles[i][1])
+        distances.append(dist)
+
+
+    # 2粒子間の距離のヒストグラムをプロット
+    fig = px.histogram(distances, title='Distance between Two Particles', nbins=1000)
+    fig.update_layout(xaxis_title='Distance', yaxis_title='Frequency')
+    st.plotly_chart(fig, theme=None)
+
+
 
 def main():
     st.title('Metropolis-Hastings Algorithm Sampling')
