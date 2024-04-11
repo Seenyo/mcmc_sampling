@@ -69,8 +69,8 @@ def main():
     c = 0.1
     s = 0.1
     proposal_std = 0.1
-    num_of_independent_trials = 10000
-    num_of_iterations_for_each_trial = 10000
+    num_of_independent_trials = 1000000
+    num_of_iterations_for_each_trial = 100000
 
     ############################## GPU Calculation ##############################
     gpu_calc_start = time.time()
