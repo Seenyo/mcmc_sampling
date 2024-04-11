@@ -79,20 +79,20 @@ class MetropolisHastings:
 
         kappa2_37_sum = 0.0
 
-        x1 = self.proposed_particles[independent_idx, 0] if is_proposed else self.mh_particles[independent_idx, 0]
-        kappa2_37_sum = ti.sin(2 * 3.14 * x1[0]) + 1
+        # x1 = self.proposed_particles[independent_idx, 0] if is_proposed else self.mh_particles[independent_idx, 0]
+        # kappa2_37_sum = ti.sin(2 * 3.14 * x1[0]) + 1
 
-        # for k in range(self.num_of_particles):
-        #     for l in range(k + 1, self.num_of_particles):
-        #         x1 = self.proposed_particles[independent_idx, k] if is_proposed else self.mh_particles[independent_idx, k]
-        #         x2 = self.proposed_particles[independent_idx, l] if is_proposed else self.mh_particles[independent_idx, l]
-        #         r = self.toroidal_distance(1.0, x1, x2)
-        #         kappa2_37_sum += self.c * ti.exp(-1 * r / self.s) * (
-        #                     ti.sin(self.a * (r / self.s - self.b)) - c_ab_val * 0.5)
+        for k in range(self.num_of_particles):
+            for l in range(k + 1, self.num_of_particles):
+                x1 = self.proposed_particles[independent_idx, k] if is_proposed else self.mh_particles[independent_idx, k]
+                x2 = self.proposed_particles[independent_idx, l] if is_proposed else self.mh_particles[independent_idx, l]
+                r = self.toroidal_distance(1.0, x1, x2)
+                kappa2_37_sum += self.c * ti.exp(-1 * r / self.s) * (
+                            ti.sin(self.a * (r / self.s - self.b)) - c_ab_val * 0.5)
 
         # val = 1 / (1 ** self.num_of_particles) + 1 / (1 ** (self.num_of_particles - 2)) * kappa2_37_sum
-        # return val
-        return kappa2_37_sum
+        val = kappa2_37_sum + 0.05
+        return val
 
     @ti.kernel
     def compute_mh(self):
@@ -100,11 +100,11 @@ class MetropolisHastings:
             for j in range(self.num_of_particles):
                 val_x = ti.random(dtype=ti.f32) * self.proposal_std
                 val_y = ti.random(dtype=ti.f32) * self.proposal_std
-                # print(val_x, val_y)
+
                 self.proposed_particles[i, j][0] = (self.mh_particles[i, j][0] + val_x) % 1.0
                 self.proposed_particles[i, j][1] = (self.mh_particles[i, j][1] + val_y) % 1.0
 
-            acceptance_ratio = self.target_distribution(i, True) / self.target_distribution(i, False)
+            acceptance_ratio = self.target_distribution(i, True) / self.target_distribution(i)
 
             if acceptance_ratio >= 1 or ti.random(dtype=ti.f32) < acceptance_ratio:
                 for j in range(self.num_of_particles):
@@ -118,12 +118,12 @@ def initialize_parameters():
     st.session_state.b = st.sidebar.number_input("b", 0.0, 1.0, 0.25)
     st.session_state.c = st.sidebar.number_input("c", 0.0, 1.0, 0.1)
     st.session_state.s = st.sidebar.number_input("s", 0.0, 1.0, 0.1)
-    st.session_state.proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 1.0, 0.1)
+    st.session_state.proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 5.0, 1.0)
     st.session_state.r_threshold = st.sidebar.number_input("r Threshold", 0.0, 1.0, 0.01)
     st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 1000000,
-                                                                         100)
+                                                                         10000)
     st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial",
-                                                                                1, 1000000, 10)
+                                                                                1, 1000000, 10000)
     st.session_state.show_particles = st.sidebar.checkbox("Visualize Particles", False)
     st.session_state.each_particle = st.sidebar.checkbox("Visualize Each Particle Index", False)
     st.session_state.save_image = st.sidebar.checkbox("Save Image", False)
@@ -166,10 +166,10 @@ def perform_calculations():
     st.session_state.mh_particles = MH.mh_particles.to_numpy()
 
     st.session_state.distances = []
-    # for i in range(st.session_state.num_of_independent_trials):
+    for i in range(st.session_state.num_of_independent_trials):
         # Calculate the distance between two particles
-        # dist = toroidal_distance(1.0, st.session_state.mh_particles[i][0], st.session_state.mh_particles[i][1])
-        # st.session_state.distances.append(dist)
+        dist = toroidal_distance(1.0, st.session_state.mh_particles[i][0], st.session_state.mh_particles[i][1])
+        st.session_state.distances.append(dist)
 
     if st.session_state.plotly:
         # Display the particles with plotly
@@ -254,12 +254,12 @@ def visualize_particles():
 
 def visualize_histogram():
     # Display the histogram with go
-    fig = go.Figure(data=[go.Histogram(x=st.session_state.distances, nbinsx=50)])
+    fig = go.Figure(data=[go.Histogram(x=st.session_state.distances, nbinsx=1000)])
     fig.update_layout(title='Distance between Two Particles', xaxis_title='Distance', yaxis_title='Frequency')
     st.plotly_chart(fig, theme=None)
 
     # Normalize the histogram
-    hist, bin_edges = np.histogram(st.session_state.distances, bins=50)
+    hist, bin_edges = np.histogram(st.session_state.distances, bins=1000)
     # print("hist", hist)
     # print("bin_edges", bin_edges)
     bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
@@ -278,6 +278,8 @@ def visualize_histogram():
     # print("normalized_hist", normalized_hist)
 
     fig = go.Figure(data=[go.Bar(x=bin_edges, y=normalized_hist)])
+    # ヒストグラムの表示範囲を設定, 最大値はdistancesの最大値
+    fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
     fig.update_layout(title='Normalized Distance between Two Particles', xaxis_title='Distance',
                       yaxis_title='Normalized Frequency')
     st.plotly_chart(fig, theme=None)
