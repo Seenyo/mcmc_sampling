@@ -113,10 +113,14 @@ def initialize_parameters():
     st.session_state.plotly = st.sidebar.checkbox("Use Plotly", False)
 
     if 'mh_particles' not in st.session_state:
-        st.session_state.mh_particles = None
+        st.session_state.current_particles = None
+
+    if 'result_particles' not in st.session_state:
+        st.session_state.result_particles = None
 
     if 'distances' not in st.session_state:
         st.session_state.distances = None
+
 
 def perform_calculations():
     """Perform the Metropolis-Hastings calculations and return the results."""
@@ -145,18 +149,22 @@ def perform_calculations():
         MH.compute_mh()
     st.session_state.calc_time = time.time() - taichi_start
 
-    st.session_state.mh_particles = MH.mh_particles.to_numpy()
+    st.session_state.current_particles = MH.mh_particles.to_numpy()
+
+    st.info(len(st.session_state.result_particles))
 
     st.session_state.distances = []
     for i in range(st.session_state.num_of_independent_trials):
         # Calculate the distance between two particles
-        dist = toroidal_distance(1.0, st.session_state.mh_particles[i][0], st.session_state.mh_particles[i][1])
+        for j in range(len(st.session_state.result_particles)):
+            print(j)
+        dist = toroidal_distance(1.0, st.session_state.current_particles[i][0], st.session_state.current_particles[i][1])
         st.session_state.distances.append(dist)
 
     if st.session_state.plotly:
         # Display the particles with plotly
         df_list = []
-        for i, particles in enumerate(st.session_state.mh_particles):
+        for i, particles in enumerate(st.session_state.current_particles):
             df_temp = pd.DataFrame(particles, columns=['x', 'y'])
             df_temp['Particle Index'] = i % st.session_state.num_of_particles
             df_list.append(df_temp)
@@ -214,7 +222,7 @@ def visualize_particles():
     st.image(image_all)
 
     # Visualize all result particles
-    data_all = np.concatenate(st.session_state.mh_particles, axis=0)
+    data_all = np.concatenate(st.session_state.current_particles, axis=0)
     colors_all = np.zeros((len(data_all), num_of_channels))
     for i in range(st.session_state.num_of_particles):
         hue = i / float(st.session_state.num_of_particles)
@@ -226,7 +234,7 @@ def visualize_particles():
     # Visualize each particle index
     if st.session_state.each_particle:
         for i in range(st.session_state.num_of_particles):
-            data_index = np.array([chain[i] for chain in st.session_state.mh_particles])
+            data_index = np.array([chain[i] for chain in st.session_state.current_particles])
             colors_index = colors_all[i::st.session_state.num_of_particles]
             filename = f'particles_index_{i}_trial_count_{st.session_state.num_of_independent_trials}_mh_steps_{st.session_state.num_of_iterations_for_each_trial}'
             image_index = draw_particles(data_index, colors_index, filename, save=st.session_state.save_image)
@@ -271,7 +279,7 @@ def main():
         perform_calculations()
         st.info(f"Calculation Time: {st.session_state.calc_time:.2f} sec")
 
-    if st.session_state.mh_particles is not None and st.session_state.show_particles:
+    if st.session_state.current_particles is not None and st.session_state.show_particles:
         visualize_particles()
 
     if st.session_state.distances is not None:
