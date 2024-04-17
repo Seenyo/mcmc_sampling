@@ -274,22 +274,10 @@ def visualize_histogram():
 
     # Normalize the histogram
     hist, bin_edges = np.histogram(st.session_state.distances, bins=1000)
-    # print("hist", hist)
-    # print("bin_edges", bin_edges)
     bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
-    # print("bin_centers", bin_centers)
+    filtered_bin_centers = bin_centers
 
-    # r threshold is set to avoid division by zero and ignore small distances
-    valid_indices = bin_centers > st.session_state.r_threshold
-    # print("valid_indices", valid_indices)
-    filtered_bin_centers = bin_centers[valid_indices]
-    # print("filtered_bin_centers", filtered_bin_centers)
-    filtered_hist = hist[valid_indices]
-    # print("filtered_hist", filtered_hist)
-
-    normalized_hist = filtered_hist / filtered_bin_centers
-
-    # print("normalized_hist", normalized_hist)
+    normalized_hist = hist / filtered_bin_centers
 
     # calculate kappa value
     sin_ab = np.sin(st.session_state.a * st.session_state.b)
