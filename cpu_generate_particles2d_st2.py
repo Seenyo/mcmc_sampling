@@ -176,7 +176,8 @@ def perform_calculations():
 
     for i in range(len(st.session_state.result_particles)):
         for j in range(len(st.session_state.result_particles[i])):
-            dist = toroidal_distance(1.0, st.session_state.result_particles[i][j][0], st.session_state.result_particles[i][j][1])
+            dist = toroidal_distance(1.0, st.session_state.result_particles[i][j][0],
+                                     st.session_state.result_particles[i][j][1])
             st.session_state.distances.append(dist)
 
     st.info(f"Number of Distances: {len(st.session_state.distances)}")
@@ -290,12 +291,15 @@ def visualize_histogram():
     # calculate kappa value
     sin_ab = np.sin(st.session_state.a * st.session_state.b)
     cos_ab = ti.cos(st.session_state.a * st.session_state.b)
-    numerator = 2 * ((1 - 3 * st.session_state.a ** 2) * sin_ab + st.session_state.a * (st.session_state.a ** 2 - 3) * cos_ab)
+    numerator = 2 * ((1 - 3 * st.session_state.a ** 2) * sin_ab + st.session_state.a * (
+            st.session_state.a ** 2 - 3) * cos_ab)
     denominator = (st.session_state.a ** 2 + 1) ** 3
     c_ab_val = -1 * numerator / denominator
 
     def kappa(r):
-        return st.session_state.scaling_factor * st.session_state.c * np.exp(-1 * r / st.session_state.s) * (np.sin(st.session_state.a * (r / st.session_state.s - st.session_state.b)) - c_ab_val * 0.5) + st.session_state.geta
+        return st.session_state.scaling_factor * st.session_state.c * np.exp(-1 * r / st.session_state.s) * (np.sin(
+            st.session_state.a * (
+                    r / st.session_state.s - st.session_state.b)) - c_ab_val * 0.5) + st.session_state.geta
 
     kappa_values = [kappa(r) for r in filtered_bin_centers]
 
