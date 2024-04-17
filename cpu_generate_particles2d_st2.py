@@ -93,8 +93,8 @@ class MetropolisHastings:
     def compute_mh(self):
         for i in range(self.num_of_independent_trials):
             for j in range(self.num_of_particles):
-                val_x = ti.random(dtype=ti.f32) * self.proposal_std
-                val_y = ti.random(dtype=ti.f32) * self.proposal_std
+                val_x = (ti.random(dtype=ti.f32) - 0.5) * self.proposal_std
+                val_y = (ti.random(dtype=ti.f32) - 0.5) * self.proposal_std
 
                 self.proposed_particles[i, j][0] = (self.current_particles[i, j][0] + val_x) % 1.0
                 self.proposed_particles[i, j][1] = (self.current_particles[i, j][1] + val_y) % 1.0
@@ -111,7 +111,7 @@ def initialize_parameters():
     st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 2)
     st.session_state.a = st.sidebar.number_input("a", 0.0, 10.0, np.pi)
     st.session_state.b = st.sidebar.number_input("b", 0.0, 1.0, 0.25)
-    st.session_state.c = st.sidebar.number_input("c", 0.0, 5.0, 0.1)
+    st.session_state.c = st.sidebar.number_input("c", 0.0, 5.0, 0.1, step=0.001)
     st.session_state.s = st.sidebar.number_input("s", 0.0, 1.0, 0.1)
     st.session_state.proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 5.0, 1.0)
     st.session_state.r_threshold = st.sidebar.number_input("r Threshold", 0.0, 1.0, 0.001)
@@ -139,6 +139,9 @@ def initialize_parameters():
 
 def perform_calculations():
     """Perform the Metropolis-Hastings calculations and return the results."""
+    Cab = -(2*((1-3*st.session_state.a**2)*np.sin(st.session_state.a*st.session_state.b)+st.session_state.a*(st.session_state.a**2-3)*np.cos(st.session_state.a*st.session_state.b))) / ((st.session_state.a**2+1)**3)
+    st.session_state.c = -2 / ((np.sin(-st.session_state.a*st.session_state.b)-(Cab/2)) * st.session_state.num_of_particles*(st.session_state.num_of_particles-1))
+    st.info(f'c is {st.session_state.c}')
     MH = MetropolisHastings(
         st.session_state.num_of_particles,
         st.session_state.a,
