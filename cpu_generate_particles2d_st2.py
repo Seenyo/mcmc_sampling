@@ -45,7 +45,7 @@ class MetropolisHastings:
 
     @ti.kernel
     def initialize_particles(self):
-        #Initialize the particles with the same initial values
+        # Initialize the particles with the same initial values
         for trial_idx in range(self.num_of_independent_trials):
             for particle_idx in range(self.num_of_particles):
                 self.init_particles[trial_idx, particle_idx] = ti.Vector(
@@ -118,7 +118,7 @@ def initialize_parameters():
     st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 10000000,
                                                                          10000)
     st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial",
-                                                                                1, 1000000, 10000)
+                                                                                1, 10000000, 10000)
     st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 10000, 1000)
     st.session_state.scaling_factor = st.sidebar.slider("Scaling Factor", 0.0, 10000.0, 5000.0)
     st.session_state.geta = st.sidebar.slider("Geta", 0.0, 10000.0, 5000.0)
@@ -136,11 +136,21 @@ def initialize_parameters():
     if 'distances' not in st.session_state:
         st.session_state.distances = None
 
+    if 'min_distance' not in st.session_state:
+        st.session_state.min_distance = 1.0
+
+    if 'min_distance_particles' not in st.session_state:
+        st.session_state.min_distance_particles = None
+
 
 def perform_calculations():
     """Perform the Metropolis-Hastings calculations and return the results."""
-    Cab = -(2*((1-3*st.session_state.a**2)*np.sin(st.session_state.a*st.session_state.b)+st.session_state.a*(st.session_state.a**2-3)*np.cos(st.session_state.a*st.session_state.b))) / ((st.session_state.a**2+1)**3)
-    st.session_state.c = -2 / ((np.sin(-st.session_state.a*st.session_state.b)-(Cab/2)) * st.session_state.num_of_particles*(st.session_state.num_of_particles-1))
+    Cab = -(2 * ((1 - 3 * st.session_state.a ** 2) * np.sin(
+        st.session_state.a * st.session_state.b) + st.session_state.a * (st.session_state.a ** 2 - 3) * np.cos(
+        st.session_state.a * st.session_state.b))) / ((st.session_state.a ** 2 + 1) ** 3)
+    st.session_state.c = -2 / (
+                (np.sin(-st.session_state.a * st.session_state.b) - (Cab / 2)) * st.session_state.num_of_particles * (
+                    st.session_state.num_of_particles - 1))
     st.info(f'c is {st.session_state.c}')
     MH = MetropolisHastings(
         st.session_state.num_of_particles,
@@ -176,14 +186,33 @@ def perform_calculations():
     st.info(f'Sampled a total of {len(st.session_state.result_particles)} times in each independent trial.')
 
     st.session_state.distances = []
+    st.session_state.min_distance = 100.0
+    st.session_state.min_distance_particles = None
 
     for i in range(len(st.session_state.result_particles)):
         for j in range(len(st.session_state.result_particles[i])):
-            dist = toroidal_distance(1.0, st.session_state.result_particles[i][j][0],
-                                     st.session_state.result_particles[i][j][1])
-            st.session_state.distances.append(dist)
+            for k in range(st.session_state.num_of_particles):
+                for l in range(k + 1, st.session_state.num_of_particles):
+                    dist = toroidal_distance(1.0, st.session_state.result_particles[i][j][k],
+                                             st.session_state.result_particles[i][j][l])
+                    st.session_state.distances.append(dist)
+                    if dist < st.session_state.min_distance:
+                        st.session_state.min_distance = dist
+                        st.session_state.min_distance_particles = st.session_state.result_particles[i][j]
 
     st.info(f"Number of Distances: {len(st.session_state.distances)}")
+    st.info(f'Minimum distance is: {st.session_state.min_distance}')
+
+    # plot min distance particles by plotly
+    # I wanna make a min distance and number of particles in title of figure
+    fig = go.Figure(data=[go.Scatter(x=[x[0] for x in st.session_state.min_distance_particles],
+                                     y=[x[1] for x in st.session_state.min_distance_particles],
+                                     mode='markers')])
+    fig.update_layout(title=f'Minimum Distance between Two Particles: {st.session_state.min_distance:.4f}, Number of '
+                            f'Particles: {st.session_state.num_of_particles}',
+                      xaxis_title='x', yaxis_title='y', xaxis_range=[0, 1], yaxis_range=[0, 1])
+    fig.update_layout(yaxis_scaleanchor='x', xaxis_constrain='domain')
+    st.plotly_chart(fig, theme=None)
 
     if st.session_state.plotly:
         # Display the particles with plotly
@@ -293,9 +322,11 @@ def visualize_histogram():
                     r / st.session_state.s - st.session_state.b)) - c_ab_val * 0.5) + st.session_state.geta
 
     kappa_values = [kappa(r) for r in filtered_bin_centers]
+    st.info(f'{filtered_bin_centers[0]}, {kappa_values[0]}')
 
     fig = go.Figure(data=[go.Bar(x=bin_edges, y=normalized_hist)])
-    fig.add_trace(go.Scatter(x=filtered_bin_centers, y=kappa_values, mode='lines', name='Kappa Value'))
+    # kappa
+    fig.add_trace(go.Scatter(x=filtered_bin_centers, y=kappa_values, mode='lines', name='Kappa Values'))
     # ヒストグラムの表示範囲を設定, 最大値はdistancesの最大値
     fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
     fig.update_layout(title='Normalized Distance between Two Particles', xaxis_title='Distance',
