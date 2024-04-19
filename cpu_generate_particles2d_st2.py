@@ -28,7 +28,8 @@ def toroidal_distance(length, p1, p2):
 
 @ti.data_oriented
 class MetropolisHastings:
-    def __init__(self, num_of_particles, a, b, c, s, proposal_std, num_of_independent_trials):
+    def __init__(self, num_of_particles, a, b, c, s, proposal_std, num_of_independent_trials,
+                 target_distribution_name='target_distribution'):
         self.a = a
         self.b = b
         self.c = c
@@ -40,6 +41,8 @@ class MetropolisHastings:
         self.init_particles = ti.Vector.field(2, dtype=ti.f32, shape=(num_of_independent_trials, num_of_particles))
         self.proposed_particles = ti.Vector.field(2, dtype=ti.f32, shape=(num_of_independent_trials, num_of_particles))
         self.current_particles = ti.Vector.field(2, dtype=ti.f32, shape=(num_of_independent_trials, num_of_particles))
+
+        self.target_distribution_name = target_distribution_name
 
     @ti.kernel
     def initialize_particles(self):
@@ -87,6 +90,37 @@ class MetropolisHastings:
         val = 1 / (1 ** self.num_of_particles) + 1 / (1 ** (self.num_of_particles - 2)) * kappa2_37_sum
         return val
 
+    @ti.func
+    def target_distribution2(self, trial_idx, is_proposed=False):
+        sin_ab = ti.sin(self.a * self.b)
+        cos_ab = ti.cos(self.a * self.b)
+        numerator = 2 * ((1 - 3 * self.a ** 2) * sin_ab + self.a * (self.a ** 2 - 3) * cos_ab)
+        denominator = (self.a ** 2 + 1) ** 3
+        c_ab_val = -1 * numerator / denominator
+
+        # It is clear that first_order_term should be 1.0,
+        # but we dare to calculate it for the understanding of the paper.
+
+        area = 1.0
+        first_order_term = 1.0
+        for i in range(self.num_of_particles):
+            first_order_term *= 1 / area
+
+        # calculate second_order_term
+        second_order_term = 1.0
+        for k in range(self.num_of_particles):
+            for l in range(k + 1, self.num_of_particles):
+                x1 = self.proposed_particles[trial_idx, k] if is_proposed else self.current_particles[trial_idx, k]
+                x2 = self.proposed_particles[trial_idx, l] if is_proposed else self.current_particles[trial_idx, l]
+                r = self.toroidal_distance(1.0, x1, x2)
+                kappa2_37 = self.c * ti.exp(-1 * r / self.s) * (
+                        ti.sin(self.a * (r / self.s - self.b)) - c_ab_val * 0.5)
+                second_order_term *= (1.0 + kappa2_37)
+
+        val = first_order_term * second_order_term
+
+        return val
+
     @ti.kernel
     def compute_mh(self):
         for i in range(self.num_of_independent_trials):
@@ -97,7 +131,13 @@ class MetropolisHastings:
                 self.proposed_particles[i, j][0] = (self.current_particles[i, j][0] + val_x) % 1.0
                 self.proposed_particles[i, j][1] = (self.current_particles[i, j][1] + val_y) % 1.0
 
-            acceptance_ratio = self.target_distribution(i, True) / self.target_distribution(i)
+            acceptance_ratio = 0.0
+            if self.target_distribution_name == 'target_distribution':
+                acceptance_ratio = self.target_distribution(i, True) / self.target_distribution(i)
+            elif self.target_distribution_name == 'target_distribution2':
+                acceptance_ratio = self.target_distribution2(i, True) / self.target_distribution2(i)
+            else:
+                print('Invalid target distribution name')
 
             if acceptance_ratio >= 1 or ti.random(dtype=ti.f32) < acceptance_ratio:
                 for j in range(self.num_of_particles):
@@ -106,6 +146,8 @@ class MetropolisHastings:
 def initialize_parameters():
     """Initialize and return user-defined parameters from the sidebar."""
     st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 2)
+    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution",
+                                                                     ["target_distribution", "target_distribution2"])
     st.session_state.a = st.sidebar.number_input("a", 0.0, 10.0, np.pi)
     st.session_state.b = st.sidebar.number_input("b", 0.0, 1.0, 0.25)
     st.session_state.c = st.sidebar.number_input("c", 0.0, 5.0, 0.1, step=0.001)
@@ -235,6 +277,7 @@ def perform_calculations():
         st.session_state.s,
         st.session_state.proposal_std,
         st.session_state.num_of_independent_trials,
+        st.session_state.target_distribution_name
     )
     MH.initialize_particles()
 
