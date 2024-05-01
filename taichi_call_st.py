@@ -13,9 +13,9 @@ import math
 
 # 仮想環境のアクティベーションコマンド
 if os.name == 'nt':  # Windowsの場合
-    venv_activate = ".\\sampling_env\\Scripts\\activate.bat"
+    venv_activate = ".\\.venv\\Scripts\\activate.bat"
 else:  # Unix系の場合
-    venv_activate = "source ./sampling_env/bin/activate"
+    venv_activate = "source .venv/bin/activate"
 
 def toroidal_distance(length, p1, p2):
     dx = abs(p2[0] - p1[0])
@@ -69,6 +69,9 @@ def initialize_parameters():
     if 'prev_geta' not in st.session_state:
         st.session_state.prev_geta = None
 
+    if 'r_list' not in st.session_state:
+        st.session_state.r_list = None
+
 def calculate_maximal_c():
     Cab = -(2 * ((1 - 3 * st.session_state.a ** 2) * np.sin(st.session_state.a * st.session_state.b) + st.session_state.a * (st.session_state.a ** 2 - 3) * np.cos(st.session_state.a * st.session_state.b))) / ((st.session_state.a ** 2 + 1) ** 3)
     t = np.sin(-st.session_state.a * st.session_state.b) - (Cab / 2)
@@ -117,10 +120,6 @@ def visualize_particles_with_plotly():
     fig.update_layout(yaxis_scaleanchor='x', xaxis_constrain='domain')
     st.plotly_chart(fig, theme=None)
 
-# @st.cache_data
-# def calculate_kappa():
-#     return st.session_state.scaling_factor * st.session_state.c * np.exp(-1 * st.session_state.r_list / st.session_state.s) * (np.sin(st.session_state.a * (st.session_state.r_list / st.session_state.s - st.session_state.b)) - st.session_state.c_ab_val * 0.5) + st.session_state.geta
-
 @st.cache_data
 def calculate_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
     return scaling_factor * c * np.exp(-1 * r_list / s) * (np.sin(a * (r_list / s - b)) - c_ab_val * 0.5) + geta
@@ -147,18 +146,20 @@ def visualize_histogram():
         denominator = (st.session_state.a ** 2 + 1) ** 3
         st.session_state.c_ab_val = -1 * numerator / denominator
 
+        r_list = np.linspace(st.session_state.r_threshold, math.sqrt(2) * 0.5, 100)
+
         if 'kappa_values' not in st.session_state:
             st.session_state.kappa_values = None
 
         if (st.session_state.scaling_factor != st.session_state.prev_scaling_factor) or (st.session_state.geta != st.session_state.prev_geta):
-            r_list = np.linspace(st.session_state.r_threshold, math.sqrt(2) * 0.5, 100)
             st.session_state.kappa_values = calculate_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
             st.session_state.prev_scaling_factor = st.session_state.scaling_factor
             st.session_state.prev_geta = st.session_state.geta
 
         fig = go.Figure(data=[go.Bar(x=bin_centers, y=normalized_hist)])
-        fig.add_trace(go.Scatter(x=st.session_state.r_list, y=st.session_state.kappa_values, mode='lines', name='Kappa Values'))
+        fig.add_trace(go.Scatter(x=r_list, y=st.session_state.kappa_values, mode='lines', name='Kappa Values'))
         fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
+        fig.update_yaxes(range=[0, max(normalized_hist) * 1.1])
         fig.update_layout(title='Normalized Distance between Two Particles', xaxis_title='Distance', yaxis_title='Normalized Frequency')
         st.plotly_chart(fig, theme=None)
 
