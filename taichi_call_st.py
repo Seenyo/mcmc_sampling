@@ -30,7 +30,7 @@ def toroidal_distance(length, p1, p2):
 
 def initialize_parameters():
     st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 2)
-    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2"])
+    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution_sigmoid"])
     st.session_state.a = st.sidebar.number_input("a", 0.0, 10.0, np.pi)
     st.session_state.b = st.sidebar.number_input("b", 0.0, 1.0, 0.25)
     st.session_state.c = st.sidebar.number_input("c", 0.0, 5.0, 0.1, step=0.001)
@@ -125,6 +125,13 @@ def visualize_particles_with_plotly():
 def calculate_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
     return scaling_factor * c * np.exp(-1 * r_list / s) * (np.sin(a * (r_list / s - b)) - c_ab_val * 0.5) + geta
 
+@st.cache_data
+def calculate_sigmoid_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
+    sigmoid_formula = 1 / (1 + np.exp(-r_list ** 2))
+    c = 12.4171897625123
+    b = -7.20859488125615
+    return scaling_factor * (c * sigmoid_formula + b) + geta
+
 
 def visualize_histogram():
     if st.session_state.distances is not None:
@@ -150,15 +157,21 @@ def visualize_histogram():
         if 'kappa_values' not in st.session_state:
             st.session_state.kappa_values = None
 
+        r_list = np.linspace(st.session_state.r_threshold, math.sqrt(2) * 0.5, 100)
+
         if (st.session_state.scaling_factor != st.session_state.prev_scaling_factor) or (st.session_state.geta != st.session_state.prev_geta):
-            r_list = np.linspace(st.session_state.r_threshold, math.sqrt(2) * 0.5, 100)
-            st.session_state.kappa_values = calculate_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
+            if st.session_state.target_distribution_name == 'target_distribution' or st.session_state.target_distribution_name == 'target_distribution2':
+                st.session_state.kappa_values = calculate_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
+            else:
+                st.session_state.kappa_values = calculate_sigmoid_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
+
             st.session_state.prev_scaling_factor = st.session_state.scaling_factor
             st.session_state.prev_geta = st.session_state.geta
 
         fig = go.Figure(data=[go.Bar(x=bin_centers, y=normalized_hist)])
-        fig.add_trace(go.Scatter(x=st.session_state.r_list, y=st.session_state.kappa_values, mode='lines', name='Kappa Values'))
+        fig.add_trace(go.Scatter(x=r_list, y=st.session_state.kappa_values, mode='lines', name='Kappa Values'))
         fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
+        fig.update_yaxes(range=[0, max(normalized_hist) * 1.1])
         fig.update_layout(title='Normalized Distance between Two Particles', xaxis_title='Distance', yaxis_title='Normalized Frequency')
         st.plotly_chart(fig, theme=None)
 

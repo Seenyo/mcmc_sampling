@@ -101,6 +101,36 @@ class MetropolisHastings:
 
         return val
 
+    @ti.func
+    def target_distribution_sigmoid(self, trial_idx, is_proposed=False):
+        # It is clear that first_order_term should be 1.0,
+        # but we dare to calculate it for the understanding of the paper.
+
+        area = 1.0
+        first_order_term = 1.0
+        for i in range(self.num_of_particles):
+            first_order_term *= 1 / area
+
+        # calculate second_order_term
+        second_order_term = 1.0
+        for k in range(self.num_of_particles):
+            for l in range(k + 1, self.num_of_particles):
+                x1 = self.proposed_particles[trial_idx, k] if is_proposed else self.current_particles[trial_idx, k]
+                x2 = self.proposed_particles[trial_idx, l] if is_proposed else self.current_particles[trial_idx, l]
+                r = self.toroidal_distance(1.0, x1, x2)
+
+                sigmoid_formula = 1 / (1 + ti.exp(-r ** 2))
+                c = 12.4171897625123
+                b = -7.20859488125615
+                second_order_term *= (1.0 + c * sigmoid_formula + b)
+
+        val = first_order_term * second_order_term
+
+        if val < 0:
+            print(f'val is a negative value: {val}')
+
+        return val
+
     @ti.kernel
     def compute_mh(self):
         for i in range(self.num_of_independent_trials):
@@ -116,6 +146,8 @@ class MetropolisHastings:
                 acceptance_ratio = self.target_distribution(i, True) / self.target_distribution(i)
             elif self.target_distribution_name == 'target_distribution2':
                 acceptance_ratio = self.target_distribution2(i, True) / self.target_distribution2(i)
+            elif self.target_distribution_name == 'target_distribution_sigmoid':
+                acceptance_ratio = self.target_distribution_sigmoid(i, True) / self.target_distribution_sigmoid(i)
             else:
                 print('Invalid target distribution name')
 
