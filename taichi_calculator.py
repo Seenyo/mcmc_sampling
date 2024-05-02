@@ -131,6 +131,40 @@ class MetropolisHastings:
 
         return val
 
+    @ti.func
+    def target_distribution3(self, trial_idx, is_proposed=False):
+        sin_ab = ti.sin(self.a * self.b)
+        cos_ab = ti.cos(self.a * self.b)
+        numerator = 2 * self.a * cos_ab - (1 - self.a**2) * sin_ab
+        denominator = (1 + self.a ** 2) ** 2
+        c_ab_val = -1.0 * numerator / denominator
+
+        # It is clear that first_order_term should be 1.0,
+        # but we dare to calculate it for the understanding of the paper.
+
+        area = 1.0
+        first_order_term = 1.0
+        for i in range(self.num_of_particles):
+            first_order_term *= 1 / area
+
+        # calculate second_order_term
+        second_order_term = 1.0
+        for k in range(self.num_of_particles):
+            for l in range(k + 1, self.num_of_particles):
+                x1 = self.proposed_particles[trial_idx, k] if is_proposed else self.current_particles[trial_idx, k]
+                x2 = self.proposed_particles[trial_idx, l] if is_proposed else self.current_particles[trial_idx, l]
+                r = self.toroidal_distance(1.0, x1, x2)
+                kappa2_37 = self.c * ti.exp(-1 * r) * (
+                        ti.sin(self.a * (r - self.b)) - c_ab_val)
+                second_order_term *= (1.0 + kappa2_37)
+
+        val = first_order_term * second_order_term
+
+        if val < 0:
+            print(f'val is a negative value: {val}')
+
+        return val
+
     @ti.kernel
     def compute_mh(self):
         for i in range(self.num_of_independent_trials):
@@ -146,12 +180,14 @@ class MetropolisHastings:
                 acceptance_ratio = self.target_distribution(i, True) / self.target_distribution(i)
             elif self.target_distribution_name == 'target_distribution2':
                 acceptance_ratio = self.target_distribution2(i, True) / self.target_distribution2(i)
+            elif self.target_distribution_name == 'target_distribution3':
+                acceptance_ratio = self.target_distribution3(i, True) / self.target_distribution3(i)
             elif self.target_distribution_name == 'target_distribution_sigmoid':
                 acceptance_ratio = self.target_distribution_sigmoid(i, True) / self.target_distribution_sigmoid(i)
             else:
                 print('Invalid target distribution name')
 
-            if acceptance_ratio >= 1 or ti.random(dtype=ti.f32) < acceptance_ratio:
+            if acceptance_ratio >= 1.0 or ti.random(dtype=ti.f32) < acceptance_ratio:
                 for j in range(self.num_of_particles):
                     self.current_particles[i, j] = self.proposed_particles[i, j]
 

@@ -30,9 +30,9 @@ def toroidal_distance(length, p1, p2):
 
 def initialize_parameters():
     st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 2)
-    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution_sigmoid"])
+    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution_sigmoid"])
     st.session_state.a = st.sidebar.number_input("a", 0.0, 10.0, np.pi)
-    st.session_state.b = st.sidebar.number_input("b", 0.0, 1.0, 0.25)
+    st.session_state.b = st.sidebar.number_input("b", 0.0, 5.0, 0.25)
     st.session_state.c = st.sidebar.number_input("c", 0.0, 5.0, 0.1, step=0.001)
     st.session_state.s = st.sidebar.number_input("s", 0.0, 1.0, 0.1)
     st.session_state.proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 5.0, 1.0)
@@ -41,7 +41,7 @@ def initialize_parameters():
     st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 10000000, 10000)
     st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 10000, 1000)
     st.session_state.scaling_factor = st.sidebar.number_input("Scaling Factor", 0.0, 100.0, 50.0)
-    st.session_state.geta = st.sidebar.number_input("Geta", 0.0, 10.0, 5.0)
+    st.session_state.geta = st.sidebar.number_input("Geta", 0.0, 30.0, 5.0)
     st.session_state.show_particles = st.sidebar.checkbox("Visualize Particles", False)
     st.session_state.each_particle = st.sidebar.checkbox("Visualize Each Particle Index", False)
     st.session_state.save_image = st.sidebar.checkbox("Save Image", False)
@@ -74,11 +74,19 @@ def calculate_maximal_c():
     t = np.sin(-st.session_state.a * st.session_state.b) - (Cab / 2)
 
     if st.session_state.target_distribution_name == 'target_distribution':
-        num_of_combinations_without_dividing = st.session_state.num_of_particles * (
-                    st.session_state.num_of_particles - 1)
+        num_of_combinations = st.session_state.num_of_particles * (
+                    st.session_state.num_of_particles - 1) / 2
+        st.session_state.c = -1 / (t * num_of_combinations)
+    elif st.session_state.target_distribution_name == 'target_distribution3':
+        sin_ab = np.sin(st.session_state.a * st.session_state.b)
+        cos_ab = np.cos(st.session_state.a * st.session_state.b)
+        numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a**2) * sin_ab
+        denominator = (1 + st.session_state.a ** 2) ** 2
+        Cab = -1.0 * numerator / denominator
+        st.info(f'Cab is {Cab}')
+        st.session_state.c = -1 / (np.sin(-st.session_state.a * st.session_state.b) - Cab)
     else:
-        num_of_combinations_without_dividing = 2 * (2 - 1)
-    st.session_state.c = -2 / (t * num_of_combinations_without_dividing)
+        st.session_state.c = -1 / t
     st.info(f'c is {st.session_state.c}')
 
 def load_data():
@@ -122,6 +130,10 @@ def calculate_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
     return scaling_factor * c * np.exp(-1 * r_list / s) * (np.sin(a * (r_list / s - b)) - c_ab_val * 0.5) + geta
 
 @st.cache_data
+def calculate_kappa2(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
+    return scaling_factor * c * np.exp(-1 * r_list) * (np.sin(a * (r_list - b)) - c_ab_val) + geta
+
+@st.cache_data
 def calculate_sigmoid_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
     sigmoid_formula = 1 / (1 + np.exp(-r_list ** 2))
     c = 12.4171897625123
@@ -146,9 +158,6 @@ def visualize_histogram():
         # calculate kappa value
         sin_ab = np.sin(st.session_state.a * st.session_state.b)
         cos_ab = np.cos(st.session_state.a * st.session_state.b)
-        numerator = 2 * ((1 - 3 * st.session_state.a ** 2) * sin_ab + st.session_state.a * (st.session_state.a ** 2 - 3) * cos_ab)
-        denominator = (st.session_state.a ** 2 + 1) ** 3
-        st.session_state.c_ab_val = -1 * numerator / denominator
 
         if 'kappa_values' not in st.session_state:
             st.session_state.kappa_values = None
@@ -157,7 +166,15 @@ def visualize_histogram():
 
         if (st.session_state.scaling_factor != st.session_state.prev_scaling_factor) or (st.session_state.geta != st.session_state.prev_geta):
             if st.session_state.target_distribution_name == 'target_distribution' or st.session_state.target_distribution_name == 'target_distribution2':
+                numerator = 2 * ((1 - 3 * st.session_state.a ** 2) * sin_ab + st.session_state.a * (st.session_state.a ** 2 - 3) * cos_ab)
+                denominator = (st.session_state.a ** 2 + 1) ** 3
+                st.session_state.c_ab_val = -1 * numerator / denominator
                 st.session_state.kappa_values = calculate_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
+            elif st.session_state.target_distribution_name == 'target_distribution3':
+                numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a**2) * sin_ab
+                denominator = (1 + st.session_state.a ** 2) ** 2
+                st.session_state.c_ab_val = -1 * numerator / denominator
+                st.session_state.kappa_values = calculate_kappa2(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
             else:
                 st.session_state.kappa_values = calculate_sigmoid_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
 
