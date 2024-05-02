@@ -13,9 +13,9 @@ import math
 
 # 仮想環境のアクティベーションコマンド
 if os.name == 'nt':  # Windowsの場合
-    venv_activate = ".\\sampling_env\\Scripts\\activate.bat"
+    venv_activate = ".\\.venv\\Scripts\\activate.bat"
 else:  # Unix系の場合
-    venv_activate = "source ./sampling_env/bin/activate"
+    venv_activate = "source .venv/bin/activate"
 
 def toroidal_distance(length, p1, p2):
     dx = abs(p2[0] - p1[0])
@@ -116,10 +116,6 @@ def visualize_particles_with_plotly():
                      color_continuous_scale=px.colors.qualitative.G10)
     fig.update_layout(yaxis_scaleanchor='x', xaxis_constrain='domain')
     st.plotly_chart(fig, theme=None)
-
-# @st.cache_data
-# def calculate_kappa():
-#     return st.session_state.scaling_factor * st.session_state.c * np.exp(-1 * st.session_state.r_list / st.session_state.s) * (np.sin(st.session_state.a * (st.session_state.r_list / st.session_state.s - st.session_state.b)) - st.session_state.c_ab_val * 0.5) + st.session_state.geta
 
 @st.cache_data
 def calculate_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):

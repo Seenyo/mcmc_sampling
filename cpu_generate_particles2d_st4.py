@@ -17,6 +17,7 @@ from stqdm import stqdm
 from vispy import scene
 from vispy.io import write_png
 
+
 def count_digits(n):
     if n > 0:
         return int(math.floor(math.log10(n))) + 1
@@ -45,6 +46,7 @@ def toroidal_distance(length, p1, p2):
         dy = length - dy
 
     return math.sqrt(dx ** 2 + dy ** 2)
+
 
 @ti.data_oriented
 class MetropolisHastings:
@@ -162,6 +164,7 @@ class MetropolisHastings:
                 for j in range(self.num_of_particles):
                     self.current_particles[i, j] = self.proposed_particles[i, j]
 
+
 def initialize_parameters():
     """Initialize and return user-defined parameters from the sidebar."""
     st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 2)
@@ -173,8 +176,10 @@ def initialize_parameters():
     st.session_state.s = st.sidebar.number_input("s", 0.0, 1.0, 0.1)
     st.session_state.proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 5.0, 1.0)
     st.session_state.r_threshold = st.sidebar.number_input("r Threshold", 0.0, 1.0, 0.001)
-    st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 10000000, 10000)
-    st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 10000000, 10000)
+    st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 10000000,
+                                                                         10000)
+    st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial",
+                                                                                1, 10000000, 10000)
     st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 10000, 1000)
     st.session_state.scaling_factor = st.sidebar.slider("Scaling Factor", 0.0, 100.0, 50.0)
     st.session_state.geta = st.sidebar.slider("Geta", 0.0, 10.0, 5.0)
@@ -199,17 +204,21 @@ def initialize_parameters():
     if 'min_distance_particles' not in st.session_state:
         st.session_state.min_distance_particles = None
 
+
 def calculate_maximal_c():
-    Cab = -(2 * ((1 - 3 * st.session_state.a ** 2) * np.sin(st.session_state.a * st.session_state.b) + st.session_state.a * (st.session_state.a ** 2 - 3) * np.cos(st.session_state.a * st.session_state.b))) / ((st.session_state.a ** 2 + 1) ** 3)
+    Cab = -(2 * ((1 - 3 * st.session_state.a ** 2) * np.sin(
+        st.session_state.a * st.session_state.b) + st.session_state.a * (st.session_state.a ** 2 - 3) * np.cos(
+        st.session_state.a * st.session_state.b))) / ((st.session_state.a ** 2 + 1) ** 3)
     t = np.sin(-st.session_state.a * st.session_state.b) - (Cab / 2)
 
     if st.session_state.target_distribution_name == 'target_distribution':
         num_of_combinations_without_dividing = st.session_state.num_of_particles * (
-                    st.session_state.num_of_particles - 1)
+                st.session_state.num_of_particles - 1)
     else:
         num_of_combinations_without_dividing = 2 * (2 - 1)
     st.session_state.c = -2 / (t * num_of_combinations_without_dividing)
     st.info(f'c is {st.session_state.c}')
+
 
 def visualize_particles_with_plotly():
     df_list = []
@@ -226,6 +235,8 @@ def visualize_particles_with_plotly():
                      color_continuous_scale=px.colors.qualitative.G10)
     fig.update_layout(yaxis_scaleanchor='x', xaxis_constrain='domain')
     st.plotly_chart(fig, theme=None)
+
+
 def visualize_min_distance_particles():
     """Visualize the minimum distance particles."""
     st.session_state.distances = []
@@ -246,7 +257,8 @@ def visualize_min_distance_particles():
 
     for i in range(len(st.session_state.result_particles)):
         for j in range(len(st.session_state.result_particles[i])):
-            dist = toroidal_distance(1.0, st.session_state.result_particles[i][j][0], st.session_state.result_particles[i][j][1])
+            dist = toroidal_distance(1.0, st.session_state.result_particles[i][j][0],
+                                     st.session_state.result_particles[i][j][1])
             st.session_state.distances.append(dist)
             if dist < st.session_state.min_distance:
                 st.session_state.min_distance = dist
@@ -257,7 +269,9 @@ def visualize_min_distance_particles():
     st.info(f'Minimum distance is: {st.session_state.min_distance}')
 
     # plot min distance particles by plotly
-    fig = go.Figure(data=[go.Scatter(x=[x[0] for x in st.session_state.min_distance_particles], y=[x[1] for x in st.session_state.min_distance_particles], mode='markers', showlegend=False)])
+    fig = go.Figure(data=[go.Scatter(x=[x[0] for x in st.session_state.min_distance_particles],
+                                     y=[x[1] for x in st.session_state.min_distance_particles], mode='markers',
+                                     showlegend=False)])
 
     # plot the minimum distance pair with red dots and a line
     # Extract coordinates for clarity
@@ -296,6 +310,7 @@ def visualize_min_distance_particles():
     )
 
     st.plotly_chart(fig, theme=None)
+
 
 def perform_calculations():
     """Perform the Metropolis-Hastings calculations and return the results."""
@@ -339,7 +354,6 @@ def perform_calculations():
     if st.session_state.plotly:
         # Display the particles with plotly
         visualize_particles_with_plotly()
-
 
 
 def draw_particles(data, colors, filename, size=(1000, 1000), save=False):
@@ -438,8 +452,10 @@ def visualize_histogram():
     fig.add_trace(go.Scatter(x=r_list, y=kappa_values, mode='lines', name='Kappa Values'))
     # ヒストグラムの表示範囲を設定, 最大値はdistancesの最大値
     fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
-    fig.update_layout(title='Normalized Distance between Two Particles', xaxis_title='Distance', yaxis_title='Normalized Frequency')
+    fig.update_layout(title='Normalized Distance between Two Particles', xaxis_title='Distance',
+                      yaxis_title='Normalized Frequency')
     st.plotly_chart(fig, theme=None)
+
 
 def main():
     st.title('Metropolis-Hastings Algorithm Sampling')
