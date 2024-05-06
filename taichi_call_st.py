@@ -13,9 +13,9 @@ import math
 
 # 仮想環境のアクティベーションコマンド
 if os.name == 'nt':  # Windowsの場合
-    venv_activate = ".\\.venv\\Scripts\\activate.bat"
+    venv_activate = ".\\venv\\Scripts\\activate.bat"
 else:  # Unix系の場合
-    venv_activate = "source .venv/bin/activate"
+    venv_activate = "source venv/bin/activate"
 
 def toroidal_distance(length, p1, p2):
     dx = abs(p2[0] - p1[0])
@@ -30,11 +30,11 @@ def toroidal_distance(length, p1, p2):
 
 def initialize_parameters():
     st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 2)
-    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution_sigmoid"])
+    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution_sigmoid"])
     st.session_state.a = st.sidebar.number_input("a", 0.0, 10.0, np.pi)
     st.session_state.b = st.sidebar.number_input("b", 0.0, 5.0, 0.25)
     st.session_state.c = st.sidebar.number_input("c", 0.0, 5.0, 0.1, step=0.001)
-    st.session_state.s = st.sidebar.number_input("s", 0.0, 1.0, 0.1)
+    st.session_state.s = st.sidebar.number_input("s", 0.0, 5.0, 0.1)
     st.session_state.proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 5.0, 1.0)
     st.session_state.r_threshold = st.sidebar.number_input("r Threshold", 0.0, 1.0, 0.001)
     st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 10000000, 10000)
@@ -82,9 +82,18 @@ def calculate_maximal_c():
         cos_ab = np.cos(st.session_state.a * st.session_state.b)
         numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a**2) * sin_ab
         denominator = (1 + st.session_state.a ** 2) ** 2
-        Cab = -1.0 * numerator / denominator
+        Cab = numerator / denominator
         st.info(f'Cab is {Cab}')
         st.session_state.c = -1 / (np.sin(-st.session_state.a * st.session_state.b) - Cab)
+    elif st.session_state.target_distribution_name == 'target_distribution4':
+        sin_ab = np.sin(st.session_state.a * st.session_state.b)
+        cos_ab = np.cos(st.session_state.a * st.session_state.b)
+        numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a ** 2) * sin_ab
+        denominator = (1 + st.session_state.a ** 2) ** 2
+        Cab = numerator / denominator
+        st.info(f'Cab is {Cab}')
+        num_of_combinations = st.session_state.num_of_particles * (st.session_state.num_of_particles - 1) / 2
+        st.session_state.c = -1 / ((np.sin(-st.session_state.a * st.session_state.b) - Cab) * num_of_combinations)
     else:
         st.session_state.c = -1 / t
     st.info(f'c is {st.session_state.c}')
@@ -131,7 +140,7 @@ def calculate_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
 
 @st.cache_data
 def calculate_kappa2(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
-    return scaling_factor * c * np.exp(-1 * r_list) * (np.sin(a * (r_list - b)) - c_ab_val) + geta
+    return scaling_factor * c * np.exp(-1 * r_list / s) * (np.sin(a * (r_list / s - b)) - c_ab_val) + geta
 
 @st.cache_data
 def calculate_sigmoid_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
@@ -145,12 +154,13 @@ def visualize_histogram():
     if st.session_state.distances is not None:
         # Display the histogram with go
         # Display as a density plot
-        fig = go.Figure(data=[go.Histogram(x=st.session_state.distances, histnorm='density', nbinsx=100)])
+        fig = go.Figure(data=[go.Histogram(x=st.session_state.distances, histnorm='density', nbinsx=50)])
         fig.update_layout(title='Distance between Two Particles', xaxis_title='Distance', yaxis_title='Density')
+        fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
         st.plotly_chart(fig, theme=None)
 
         # Normalize the histogram as a density plot
-        hist, bin_edges = np.histogram(st.session_state.distances, bins=100, density=True)
+        hist, bin_edges = np.histogram(st.session_state.distances, bins=50, density=True)
         bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
 
         normalized_hist = hist / bin_centers
@@ -162,7 +172,7 @@ def visualize_histogram():
         if 'kappa_values' not in st.session_state:
             st.session_state.kappa_values = None
 
-        r_list = np.linspace(st.session_state.r_threshold, math.sqrt(2) * 0.5, 100)
+        r_list = np.linspace(0, 5, 100)
 
         if (st.session_state.scaling_factor != st.session_state.prev_scaling_factor) or (st.session_state.geta != st.session_state.prev_geta):
             if st.session_state.target_distribution_name == 'target_distribution' or st.session_state.target_distribution_name == 'target_distribution2':
@@ -173,7 +183,13 @@ def visualize_histogram():
             elif st.session_state.target_distribution_name == 'target_distribution3':
                 numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a**2) * sin_ab
                 denominator = (1 + st.session_state.a ** 2) ** 2
-                st.session_state.c_ab_val = -1 * numerator / denominator
+                st.session_state.c_ab_val = numerator / denominator
+                st.session_state.geta = st.session_state.scaling_factor
+                st.session_state.kappa_values = calculate_kappa2(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
+            elif st.session_state.target_distribution_name == 'target_distribution4':
+                numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a ** 2) * sin_ab
+                denominator = (1 + st.session_state.a ** 2) ** 2
+                st.session_state.c_ab_val = numerator / denominator
                 st.session_state.kappa_values = calculate_kappa2(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
             else:
                 st.session_state.kappa_values = calculate_sigmoid_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
