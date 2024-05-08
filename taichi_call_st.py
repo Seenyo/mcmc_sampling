@@ -40,13 +40,14 @@ def initialize_parameters():
     st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 10000000, 10000)
     st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 10000000, 10000)
     st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 10000, 1000)
-    st.session_state.scaling_factor = st.sidebar.number_input("Scaling Factor", 0.0, 100.0, 50.0)
-    st.session_state.geta = st.sidebar.number_input("Geta", 0.0, 30.0, 5.0)
+    st.session_state.scaling_factor = st.sidebar.number_input("Scaling Factor", 0.0, 100.0, 50.0, step=0.5)
+    st.session_state.geta = st.sidebar.number_input("Geta", 0.0, 30.0, 5.0, step=0.5)
     st.session_state.show_particles = st.sidebar.checkbox("Visualize Particles", False)
     st.session_state.each_particle = st.sidebar.checkbox("Visualize Each Particle Index", False)
     st.session_state.save_image = st.sidebar.checkbox("Save Image", False)
     st.session_state.plotly = st.sidebar.checkbox("Use Plotly", False)
     st.session_state.use_maximal_c = st.sidebar.checkbox("Use Maximal c", True)
+    st.session_state.acceptance_ratio_calculation_with_log = st.sidebar.checkbox("Calculate Acceptance Ratio with Log", True)
 
     if 'mh_particles' not in st.session_state:
         st.session_state.current_particles = None
@@ -78,6 +79,10 @@ def calculate_maximal_c():
                     st.session_state.num_of_particles - 1) / 2
         st.session_state.c = -1 / (t * num_of_combinations)
     elif st.session_state.target_distribution_name == 'target_distribution3':
+        st.session_state.a = 5.0
+        st.session_state.b = 1.6
+        st.session_state.s = 1.6
+
         sin_ab = np.sin(st.session_state.a * st.session_state.b)
         cos_ab = np.cos(st.session_state.a * st.session_state.b)
         numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a**2) * sin_ab
@@ -120,19 +125,44 @@ def load_data():
 
 def visualize_particles_with_plotly():
     df_list = []
-    for i, particles in enumerate(st.session_state.current_particles):
-        df_temp = pd.DataFrame(particles, columns=['x', 'y'])
-        df_temp['Particle Index'] = i % st.session_state.num_of_particles
-        df_list.append(df_temp)
+    # for i, particles in enumerate(st.session_state.current_particles):
+    #     df_temp = pd.DataFrame(particles, columns=['x', 'y'])
+    #     df_temp['Particle Index'] = i % st.session_state.num_of_particles
+    #     df_list.append(df_temp)
+    #
+    # df = pd.concat(df_list, ignore_index=True)
+    #
+    # fig = px.scatter(df, x='x', y='y', color='Particle Index',
+    #                  title='Metropolis-Hastings Algorithm Sampling with Colored Particles',
+    #                  range_x=[0, 1], range_y=[0, 1], width=700, height=700,
+    #                  color_continuous_scale=px.colors.qualitative.G10)
+    # fig.update_layout(yaxis_scaleanchor='x', xaxis_constrain='domain')
+    # st.plotly_chart(fig, theme=None)
 
-    df = pd.concat(df_list, ignore_index=True)
+    # st.session_state.current_particlesの最後の要素を取得
+    last_particles = st.session_state.current_particles[-1]
+    st.info(f'Number of Particles: {len(last_particles)}')
+    st.info(last_particles)
 
-    fig = px.scatter(df, x='x', y='y', color='Particle Index',
-                     title='Metropolis-Hastings Algorithm Sampling with Colored Particles',
-                     range_x=[0, 1], range_y=[0, 1], width=700, height=700,
-                     color_continuous_scale=px.colors.qualitative.G10)
-    fig.update_layout(yaxis_scaleanchor='x', xaxis_constrain='domain')
+    # last_particlesをplotlyで描画, 正方形の範囲, スケーリングを指定
+    fig = go.Figure()
+    for i in range(len(last_particles)):
+        fig.add_trace(go.Scatter(x=[last_particles[i][0]], y=[last_particles[i][1]], mode='markers', name=f'Particle {i}'))
+    fig.update_layout(title='Metropolis-Hastings Algorithm Sampling with Particles',
+                      xaxis_title='x',
+                      yaxis_title='y',
+                      xaxis_range=[0, 1],
+                      yaxis_range=[0, 1],
+                      xaxis=dict(constrain='domain'),
+                      yaxis=dict(scaleanchor='x')
+                      )
+    # 表示領域を正方形にする
+    fig.update_xaxes(range=[0, 1])
+    fig.update_yaxes(range=[0, 1], scaleanchor='x', scaleratio=1)
     st.plotly_chart(fig, theme=None)
+    
+
+
 
 @st.cache_data
 def calculate_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
@@ -172,7 +202,7 @@ def visualize_histogram():
         if 'kappa_values' not in st.session_state:
             st.session_state.kappa_values = None
 
-        r_list = np.linspace(0, 5, 100)
+        r_list = np.linspace(0, 5, 500)
 
         if (st.session_state.scaling_factor != st.session_state.prev_scaling_factor) or (st.session_state.geta != st.session_state.prev_geta):
             if st.session_state.target_distribution_name == 'target_distribution' or st.session_state.target_distribution_name == 'target_distribution2':
@@ -338,6 +368,7 @@ def main():
         calculate_maximal_c()
 
     if st.button('Calculate'):
+        log_flag = "--acceptance_ratio_calculation_with_log" if st.session_state.acceptance_ratio_calculation_with_log else ""
         # Run taichi_calculator.py using subprocess with virtual environment activation
         subprocess.run(
             f"{venv_activate} && python taichi_calculator.py "
@@ -350,7 +381,9 @@ def main():
             f"--num_of_independent_trials {st.session_state.num_of_independent_trials} "
             f"--target_distribution_name {st.session_state.target_distribution_name} "
             f"--num_of_iterations_for_each_trial {st.session_state.num_of_iterations_for_each_trial} "
-            f"--num_of_sampling_strides {st.session_state.num_of_sampling_strides}", shell=True
+            f"--num_of_sampling_strides {st.session_state.num_of_sampling_strides} "
+            f"{log_flag}",
+            shell=True
         )
         load_data()
         st.info(f"Calculation Time: {st.session_state.calc_time:.2f} sec")
