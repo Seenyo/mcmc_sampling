@@ -14,6 +14,7 @@ def k2_example1(a, b, c, s, r):
 def k2_example2(a, b, c, r):
     #return c * (math.exp(-r/a) / (a*a) - math.exp(-r/b) / (b*b))
     ret = c * (math.exp(-r/a) / (a*a) - math.exp(-r/b) / (b*b))
+    # ret = c * (math.exp(-r / a) / (a**3) - math.exp(-r / b) / (b**3))
     #print("k2_ex2() a=", a, ", b=", b, ", c=", c, ", r=", r, ", ret=", ret)
     return ret
 # D = [0,1]^2; k_1 = U = 1
@@ -55,6 +56,8 @@ def sample_a_new_point(prev_points, a, b, c):
         #print("cp = ", conditional_propability)
         _r = random.random() * factor
         if _r < conditional_propability:
+            print("conditional_propability: ", conditional_propability)
+            print("x: ", x.transpose())
             # _min_dist = min_dist(prev_points, x)
             # if _min_dist < 0.05:
             #     print("prev_points: ", prev_points)

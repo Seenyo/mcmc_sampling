@@ -13,9 +13,9 @@ import math
 
 # 仮想環境のアクティベーションコマンド
 if os.name == 'nt':  # Windowsの場合
-    venv_activate = ".\\venv\\Scripts\\activate.bat"
+    venv_activate = ".\\.venv\\Scripts\\activate.bat"
 else:  # Unix系の場合
-    venv_activate = "source venv/bin/activate"
+    venv_activate = "source .venv/bin/activate"
 
 def toroidal_distance(length, p1, p2):
     dx = abs(p2[0] - p1[0])
