@@ -265,6 +265,55 @@ class MetropolisHastings:
 
         return val
 
+    def target_distribution5(self, trial_idx, is_proposed=False):
+        c = (2 * math.pi * (self.b + 1) - self.b) / (math.pi * (self.b + 2 * (self.b + 1)))
+        Cb = self.b * (1 + math.pi * c) / (-2 * math.pi * c * (self.b + 1))
+
+        area = 1.0
+        first_order_term = 1.0
+        for i in range(self.num_of_particles):
+            first_order_term *= 1 / area
+
+        # calculate second_order_term
+        second_order_term = 1.0
+        for k in range(self.num_of_particles):
+            for l in range(k + 1, self.num_of_particles):
+                x1 = self.proposed_particles[trial_idx, k] if is_proposed else self.current_particles[trial_idx, k]
+                x2 = self.proposed_particles[trial_idx, l] if is_proposed else self.current_particles[trial_idx, l]
+                r = self.toroidal_distance(1.0, x1, x2)
+                kappa2 = -1.0 if r < self.b else c * ti.exp(-(r - self.b) + Cb)
+                second_order_term *= (1.0 + kappa2)
+
+        val = first_order_term * second_order_term
+
+        if val < 0:
+            print(f'val is a negative value: {val}')
+
+        return val
+
+    def target_distribution5_log(self, trial_idx, is_proposed=False):
+        c = (2 * math.pi * (self.b + 1) - self.b) / (math.pi * (self.b + 2 * (self.b + 1)))
+        Cb = self.b * (1 + math.pi * c) / (-2 * math.pi * c * (self.b + 1))
+
+        area = 1.0
+        first_order_term = 0.0
+        for i in range(self.num_of_particles):
+            first_order_term += ti.log(1.0 / area)
+
+        # calculate second_order_term
+        second_order_term = 0.0
+        for k in range(self.num_of_particles):
+            for l in range(k + 1, self.num_of_particles):
+                x1 = self.proposed_particles[trial_idx, k] if is_proposed else self.current_particles[trial_idx, k]
+                x2 = self.proposed_particles[trial_idx, l] if is_proposed else self.current_particles[trial_idx, l]
+                r = self.toroidal_distance(1.0, x1, x2)
+                kappa2 = -1.0 if r < self.b else c * ti.exp(-(r - self.b) + Cb)
+                second_order_term += ti.log(1.0 + kappa2)
+
+        log_val = first_order_term + second_order_term
+
+        return log_val
+
     @ti.func
     def calculate_acceptance_direct(self, prob_current, prob_proposed):
         # Calculate the acceptance ratio
