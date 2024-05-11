@@ -265,6 +265,7 @@ class MetropolisHastings:
 
         return val
 
+    @ti.func
     def target_distribution5(self, trial_idx, is_proposed=False):
         c = (2 * math.pi * (self.b + 1) - self.b) / (math.pi * (self.b + 2 * (self.b + 1)))
         Cb = self.b * (1 + math.pi * c) / (-2 * math.pi * c * (self.b + 1))
@@ -281,16 +282,17 @@ class MetropolisHastings:
                 x1 = self.proposed_particles[trial_idx, k] if is_proposed else self.current_particles[trial_idx, k]
                 x2 = self.proposed_particles[trial_idx, l] if is_proposed else self.current_particles[trial_idx, l]
                 r = self.toroidal_distance(1.0, x1, x2)
-                kappa2 = -1.0 if r < self.b else c * ti.exp(-(r - self.b) + Cb)
+                kappa2 = -1.0 if r < self.b else c * ti.exp(-(r - self.b)) * (-ti.cos(r - self.b) + Cb)
                 second_order_term *= (1.0 + kappa2)
 
         val = first_order_term * second_order_term
 
-        if val < 0:
+        if val < -1e-5:
             print(f'val is a negative value: {val}')
 
         return val
 
+    @ti.func
     def target_distribution5_log(self, trial_idx, is_proposed=False):
         c = (2 * math.pi * (self.b + 1) - self.b) / (math.pi * (self.b + 2 * (self.b + 1)))
         Cb = self.b * (1 + math.pi * c) / (-2 * math.pi * c * (self.b + 1))
@@ -316,8 +318,14 @@ class MetropolisHastings:
 
     @ti.func
     def calculate_acceptance_direct(self, prob_current, prob_proposed):
-        # Calculate the acceptance ratio
-        acceptance_ratio = prob_proposed / prob_current
+        # vallidate the probability
+        # if probability is 0, it causes a ZeroDivisionError
+        acceptance_ratio = 0.0
+        if prob_current == 0 and prob_proposed != 0:
+            acceptance_ratio = 1.0
+        else:
+            acceptance_ratio = prob_proposed / prob_current
+
         return acceptance_ratio
 
     @ti.func
@@ -358,6 +366,11 @@ class MetropolisHastings:
                 prob = self.target_distribution3(trial_idx, is_proposed)
         elif self.target_distribution_name == 'target_distribution4':
             prob = self.target_distribution4(trial_idx, is_proposed)
+        elif self.target_distribution_name == 'target_distribution5':
+            if self.acceptance_ratio_calculation_with_log:
+                prob = self.target_distribution5_log(trial_idx, is_proposed)
+            else:
+                prob = self.target_distribution5(trial_idx, is_proposed)
         elif self.target_distribution_name == 'target_distribution_sigmoid':
             prob = self.target_distribution_sigmoid(trial_idx, is_proposed)
         else:
@@ -379,6 +392,8 @@ class MetropolisHastings:
         if self.target_distribution_name == 'target_distribution3' and self.acceptance_ratio_calculation_with_log:
             acceptance_ratio = self.calculate_acceptance_log(current_prob, proposed_prob)
         elif self.target_distribution_name == 'target_distribution2' and self.acceptance_ratio_calculation_with_log:
+            acceptance_ratio = self.calculate_acceptance_log(current_prob, proposed_prob)
+        elif self.target_distribution_name == 'target_distribution5' and self.acceptance_ratio_calculation_with_log:
             acceptance_ratio = self.calculate_acceptance_log(current_prob, proposed_prob)
         else:
             acceptance_ratio = self.calculate_acceptance_direct(current_prob, proposed_prob)

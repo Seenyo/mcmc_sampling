@@ -13,9 +13,9 @@ import math
 
 # 仮想環境のアクティベーションコマンド
 if os.name == 'nt':  # Windowsの場合
-    venv_activate = ".\\.venv\\Scripts\\activate.bat"
+    venv_activate = ".\\venv\\Scripts\\activate.bat"
 else:  # Unix系の場合
-    venv_activate = "source .venv/bin/activate"
+    venv_activate = "source venv/bin/activate"
 
 def toroidal_distance(length, p1, p2):
     dx = abs(p2[0] - p1[0])
@@ -30,7 +30,7 @@ def toroidal_distance(length, p1, p2):
 
 def initialize_parameters():
     st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 2)
-    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution_sigmoid"])
+    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution5", "target_distribution_sigmoid"])
     st.session_state.a = st.sidebar.number_input("a", 0.0, 10.0, np.pi)
     st.session_state.b = st.sidebar.number_input("b", 0.0, 5.0, 0.25)
     st.session_state.c = st.sidebar.number_input("c", 0.0, 5.0, 0.1, step=0.001)
@@ -172,6 +172,9 @@ def calculate_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
 def calculate_kappa2(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
     return scaling_factor * c * np.exp(-1 * r_list / s) * (np.sin(a * (r_list / s - b)) - c_ab_val) + geta
 
+def calculate_kappa3(r_list, scaling_factor, b, c, Cb, geta):
+    kappa2 = np.where(r_list < b, -1.0, c * np.exp(-(r_list - b)) * (-np.cos(r_list - b) + Cb))
+    return scaling_factor * kappa2 + scaling_factor
 @st.cache_data
 def calculate_sigmoid_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
     sigmoid_formula = 1 / (1 + np.exp(-r_list ** 2))
@@ -221,6 +224,11 @@ def visualize_histogram():
                 denominator = (1 + st.session_state.a ** 2) ** 2
                 st.session_state.c_ab_val = numerator / denominator
                 st.session_state.kappa_values = calculate_kappa2(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
+            elif st.session_state.target_distribution_name == 'target_distribution5':
+                b = st.session_state.b
+                c = (2 * math.pi * (b + 1) - b) / (math.pi * (b + 2 * (b + 1)))
+                Cb = b * (1 + math.pi * c) / (-2 * math.pi * c * (b + 1))
+                st.session_state.kappa_values = calculate_kappa3(r_list, st.session_state.scaling_factor, b, c, Cb, st.session_state.geta)
             else:
                 st.session_state.kappa_values = calculate_sigmoid_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
 
