@@ -267,8 +267,8 @@ class MetropolisHastings:
 
     @ti.func
     def target_distribution5(self, trial_idx, is_proposed=False):
-        c = (2 * math.pi * (self.b + 1) - self.b) / (math.pi * (self.b + 2 * (self.b + 1)))
-        Cb = self.b * (1 + math.pi * c) / (-2 * math.pi * c * (self.b + 1))
+        c = (self.b ** 2 + 2 * self.b + 2) / (self.b + 2)
+        Cb = self.b * (self.b + c) / (2 * c * (self.b + 1))
 
         area = 1.0
         first_order_term = 1.0
@@ -294,8 +294,8 @@ class MetropolisHastings:
 
     @ti.func
     def target_distribution5_log(self, trial_idx, is_proposed=False):
-        c = (2 * math.pi * (self.b + 1) - self.b) / (math.pi * (self.b + 2 * (self.b + 1)))
-        Cb = self.b * (1 + math.pi * c) / (-2 * math.pi * c * (self.b + 1))
+        c = (self.b ** 2 + 2 * self.b + 2) / (self.b + 2)
+        Cb = self.b * (self.b + c) / (2 * c * (self.b + 1))
 
         area = 1.0
         first_order_term = 0.0
@@ -309,7 +309,7 @@ class MetropolisHastings:
                 x1 = self.proposed_particles[trial_idx, k] if is_proposed else self.current_particles[trial_idx, k]
                 x2 = self.proposed_particles[trial_idx, l] if is_proposed else self.current_particles[trial_idx, l]
                 r = self.toroidal_distance(1.0, x1, x2)
-                kappa2 = -1.0 if r < self.b else c * ti.exp(-(r - self.b) + Cb)
+                kappa2 = -1.0 if r < self.b else c * ti.exp(-(r - self.b)) * (-ti.cos(r - self.b) + Cb)
                 second_order_term += ti.log(1.0 + kappa2)
 
         log_val = first_order_term + second_order_term
@@ -318,7 +318,7 @@ class MetropolisHastings:
 
     @ti.func
     def calculate_acceptance_direct(self, prob_current, prob_proposed):
-        # vallidate the probability
+        # validate the probability
         # if probability is 0, it causes a ZeroDivisionError
         acceptance_ratio = 0.0
         if prob_current == 0 and prob_proposed != 0:
@@ -413,6 +413,7 @@ class MetropolisHastings:
             acceptance_ratio = self.calculate_acceptance_ratio(trial_idx, proposed_prob)
 
             if acceptance_ratio >= 1.0 or ti.random(dtype=ti.f32) < acceptance_ratio:
+                # print(f'Acceptance: {acceptance_ratio}')
                 for particle_idx in range(self.num_of_particles):
                     self.current_particles[trial_idx, particle_idx] = self.proposed_particles[trial_idx, particle_idx]
                 self.current_prob[trial_idx] = proposed_prob

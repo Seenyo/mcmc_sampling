@@ -13,9 +13,9 @@ import math
 
 # 仮想環境のアクティベーションコマンド
 if os.name == 'nt':  # Windowsの場合
-    venv_activate = ".\\venv\\Scripts\\activate.bat"
+    venv_activate = ".\\.venv\\Scripts\\activate.bat"
 else:  # Unix系の場合
-    venv_activate = "source venv/bin/activate"
+    venv_activate = "source .venv/bin/activate"
 
 def toroidal_distance(length, p1, p2):
     dx = abs(p2[0] - p1[0])
@@ -39,7 +39,7 @@ def initialize_parameters():
     st.session_state.r_threshold = st.sidebar.number_input("r Threshold", 0.0, 1.0, 0.001)
     st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 10000000, 10000)
     st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 10000000, 10000)
-    st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 10000, 1000)
+    st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 1000000, 1000)
     st.session_state.scaling_factor = st.sidebar.number_input("Scaling Factor", 0.0, 100.0, 50.0, step=0.5)
     st.session_state.geta = st.sidebar.number_input("Geta", 0.0, 30.0, 5.0, step=0.5)
     st.session_state.show_particles = st.sidebar.checkbox("Visualize Particles", False)
