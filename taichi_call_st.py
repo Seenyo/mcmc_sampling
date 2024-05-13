@@ -31,7 +31,7 @@ def toroidal_distance(length, p1, p2):
 def initialize_parameters():
     st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 2)
     st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution5", "target_distribution_sigmoid"])
-    st.session_state.a = st.sidebar.number_input("a", 0.0, 10.0, np.pi)
+    st.session_state.a = st.sidebar.number_input("a", 0.0, 20.0, np.pi)
     st.session_state.b = st.sidebar.number_input("b", 0.0, 5.0, 0.25)
     st.session_state.c = st.sidebar.number_input("c", 0.0, 5.0, 0.1, step=0.001)
     st.session_state.s = st.sidebar.number_input("s", 0.0, 5.0, 0.1)
@@ -172,8 +172,8 @@ def calculate_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
 def calculate_kappa2(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
     return scaling_factor * c * np.exp(-1 * r_list / s) * (np.sin(a * (r_list / s - b)) - c_ab_val) + geta
 
-def calculate_kappa3(r_list, scaling_factor, b, c, Cb, geta):
-    kappa2 = np.where(r_list < b, -1.0, c * np.exp(-(r_list - b)) * (-np.cos(r_list - b) + Cb))
+def calculate_kappa3(r_list, scaling_factor, a, b, c, Cab, geta):
+    kappa2 = np.where(r_list < b, -1.0, c * np.exp(-(r_list - b)) * (-np.cos(a * (r_list - b)) + Cab))
     return scaling_factor * kappa2 + scaling_factor
 @st.cache_data
 def calculate_sigmoid_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
@@ -225,10 +225,18 @@ def visualize_histogram():
                 st.session_state.c_ab_val = numerator / denominator
                 st.session_state.kappa_values = calculate_kappa2(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
             elif st.session_state.target_distribution_name == 'target_distribution5':
-                b = st.session_state.b
-                c = (2 * math.pi * (b + 1) - b) / (math.pi * (b + 2 * (b + 1)))
-                Cb = b * (1 + math.pi * c) / (-2 * math.pi * c * (b + 1))
-                st.session_state.kappa_values = calculate_kappa3(r_list, st.session_state.scaling_factor, b, c, Cb, st.session_state.geta)
+                a_squared_plus_one = st.session_state.a ** 2 + 1
+                b_plus_one = st.session_state.b + 1
+                b_minus_one = st.session_state.b - 1
+
+                c_numer = (a_squared_plus_one ** 2) * (st.session_state.b ** 2 + 2 * st.session_state.b + 2)
+                c_denom = 2 * ((a_squared_plus_one ** 2) * b_plus_one - a_squared_plus_one * b_minus_one - 2)
+                c = c_numer / c_denom
+                Cab_1 = b_minus_one / (a_squared_plus_one * b_plus_one)
+                Cab_2 = 2 / (a_squared_plus_one ** 2 * b_plus_one)
+                Cab_3 = st.session_state.b ** 2 / (2 * b_plus_one * c)
+                Cab = Cab_1 + Cab_2 + Cab_3
+                st.session_state.kappa_values = calculate_kappa3(r_list, st.session_state.scaling_factor, st.session_state.a, st.session_state.b, c, Cab, st.session_state.geta)
             else:
                 st.session_state.kappa_values = calculate_sigmoid_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
 

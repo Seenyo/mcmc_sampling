@@ -267,8 +267,17 @@ class MetropolisHastings:
 
     @ti.func
     def target_distribution5(self, trial_idx, is_proposed=False):
-        c = (self.b ** 2 + 2 * self.b + 2) / (self.b + 2)
-        Cb = self.b * (self.b + c) / (2 * c * (self.b + 1))
+        a_squared_plus_one = self.a ** 2 + 1
+        b_plus_one = self.b + 1
+        b_minus_one = self.b - 1
+
+        c_numer = (a_squared_plus_one ** 2) * (self.b ** 2 + 2 * self.b + 2)
+        c_denom = 2 * ((a_squared_plus_one ** 2) * b_plus_one - a_squared_plus_one * b_minus_one - 2)
+        c = c_numer / c_denom
+        Cab_1 = b_minus_one / (a_squared_plus_one * b_plus_one)
+        Cab_2 = 2 / (a_squared_plus_one ** 2 * b_plus_one)
+        Cab_3 = self.b ** 2 / (2 * b_plus_one * c)
+        Cab = Cab_1 + Cab_2 + Cab_3
 
         area = 1.0
         first_order_term = 1.0
@@ -282,7 +291,7 @@ class MetropolisHastings:
                 x1 = self.proposed_particles[trial_idx, k] if is_proposed else self.current_particles[trial_idx, k]
                 x2 = self.proposed_particles[trial_idx, l] if is_proposed else self.current_particles[trial_idx, l]
                 r = self.toroidal_distance(1.0, x1, x2)
-                kappa2 = -1.0 if r < self.b else c * ti.exp(-(r - self.b)) * (-ti.cos(r - self.b) + Cb)
+                kappa2 = -1.0 if r < self.b else c * ti.exp(-(r - self.b)) * (-ti.cos(self.a * (r - self.b)) + Cab)
                 second_order_term *= (1.0 + kappa2)
 
         val = first_order_term * second_order_term
@@ -294,8 +303,17 @@ class MetropolisHastings:
 
     @ti.func
     def target_distribution5_log(self, trial_idx, is_proposed=False):
-        c = (self.b ** 2 + 2 * self.b + 2) / (self.b + 2)
-        Cb = self.b * (self.b + c) / (2 * c * (self.b + 1))
+        a_squared_plus_one = self.a ** 2 + 1
+        b_plus_one = self.b + 1
+        b_minus_one = self.b - 1
+
+        c_numer = (a_squared_plus_one ** 2) * (self.b ** 2 + 2 * self.b + 2)
+        c_denom = 2 * ((a_squared_plus_one ** 2) * b_plus_one - a_squared_plus_one * b_minus_one - 2)
+        c = c_numer / c_denom
+        Cab_1 = b_minus_one / (a_squared_plus_one * b_plus_one)
+        Cab_2 = 2 / (a_squared_plus_one ** 2 * b_plus_one)
+        Cab_3 = self.b ** 2 / (2 * b_plus_one * c)
+        Cab = Cab_1 + Cab_2 + Cab_3
 
         area = 1.0
         first_order_term = 0.0
@@ -309,7 +327,7 @@ class MetropolisHastings:
                 x1 = self.proposed_particles[trial_idx, k] if is_proposed else self.current_particles[trial_idx, k]
                 x2 = self.proposed_particles[trial_idx, l] if is_proposed else self.current_particles[trial_idx, l]
                 r = self.toroidal_distance(1.0, x1, x2)
-                kappa2 = -1.0 if r < self.b else c * ti.exp(-(r - self.b)) * (-ti.cos(r - self.b) + Cb)
+                kappa2 = -1.0 if r < self.b else c * ti.exp(-(r - self.b)) * (-ti.cos(self.a * (r - self.b)) + Cab)
                 second_order_term += ti.log(1.0 + kappa2)
 
         log_val = first_order_term + second_order_term
@@ -318,13 +336,7 @@ class MetropolisHastings:
 
     @ti.func
     def calculate_acceptance_direct(self, prob_current, prob_proposed):
-        # validate the probability
-        # if probability is 0, it causes a ZeroDivisionError
-        acceptance_ratio = 0.0
-        if prob_current == 0 and prob_proposed != 0:
-            acceptance_ratio = 1.0
-        else:
-            acceptance_ratio = prob_proposed / prob_current
+        acceptance_ratio = prob_proposed / prob_current
 
         return acceptance_ratio
 
