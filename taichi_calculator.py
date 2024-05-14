@@ -345,8 +345,14 @@ class MetropolisHastings:
         # Calculate the log of the acceptance ratio
         delta = log_prob_proposed - log_prob_current
 
-        # Convert log acceptance ratio to actual acceptance probability
-        acceptance_ratio = ti.exp(delta)
+        acceptance_ratio = 0.0
+
+        # nanが出る場合があるので、その場合は0を返す
+        if delta != delta:  # Replaced ti.is_nan(delta) with delta != delta
+            acceptance_ratio = 0.0
+        else:
+            # Convert log acceptance ratio to actual acceptance probability
+            acceptance_ratio = ti.exp(delta)
 
         return acceptance_ratio
 
