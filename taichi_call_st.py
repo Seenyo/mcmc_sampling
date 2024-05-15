@@ -30,8 +30,8 @@ def toroidal_distance(length, p1, p2):
 
 def initialize_parameters():
     st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 2)
-    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution5", "target_distribution6", "target_distribution_sigmoid"])
-    st.session_state.a = st.sidebar.number_input("a", 0.0, 10.0, np.pi)
+    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution5", "target_distribution01", "target_distribution005", "target_distribution_sigmoid"])
+    st.session_state.a = st.sidebar.number_input("a", 0.0, 20.0, np.pi)
     st.session_state.b = st.sidebar.number_input("b", 0.0, 5.0, 0.25)
     st.session_state.c = st.sidebar.number_input("c", 0.0, 5.0, 0.1, step=0.001)
     st.session_state.s = st.sidebar.number_input("s", 0.0, 5.0, 0.1)
@@ -39,7 +39,7 @@ def initialize_parameters():
     st.session_state.r_threshold = st.sidebar.number_input("r Threshold", 0.0, 1.0, 0.001)
     st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 10000000, 10000)
     st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 10000000, 10000)
-    st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 100000, 1000)
+    st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 1000000, 1000)
     st.session_state.scaling_factor = st.sidebar.number_input("Scaling Factor", 0.0, 100.0, 50.0, step=0.5)
     st.session_state.geta = st.sidebar.number_input("Geta", 0.0, 30.0, 5.0, step=0.5)
     st.session_state.show_particles = st.sidebar.checkbox("Visualize Particles", False)
@@ -175,13 +175,19 @@ def calculate_kappa2(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
     return scaling_factor * c * np.exp(-1 * r_list / s) * (np.sin(a * (r_list / s - b)) - c_ab_val) + geta
 
 @st.cache_data
+def calculate_kappa3(r_list, scaling_factor, a, b, c, Cab, geta):
+    kappa2 = np.where(r_list < b, -1.0, c * np.exp(-(r_list - b)) * (-np.cos(a * (r_list - b)) + Cab))
+    return scaling_factor * kappa2 + scaling_factor
+
+@st.cache_data
 def calculate_sigmoid_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
     sigmoid_formula = 1 / (1 + np.exp(-r_list ** 2))
     c = 12.4171897625123
     b = -7.20859488125615
     return scaling_factor * (c * sigmoid_formula + b) + geta
 
-def calculate_kappa5(r_list, scaling_factor, geta):
+@st.cache_data
+def calculate_kappa01(r_list, scaling_factor, geta):
     kappa_values = []
     for i in range(len(r_list)):
         if r_list[i] < 0.1:
@@ -190,7 +196,8 @@ def calculate_kappa5(r_list, scaling_factor, geta):
             kappa_values.append(scaling_factor * (-1 * np.exp(-3*(r_list[i]-0.1)) * np.cos(10*(r_list[i]-0.1))) + geta)
     return kappa_values
 
-def calculate_kappa6(r_list, scaling_factor, geta):
+@st.cache_data
+def calculate_kappa005(r_list, scaling_factor, geta):
     kappa_values = []
     for i in range(len(r_list)):
         if r_list[i] < 0.05:
@@ -241,9 +248,22 @@ def visualize_histogram():
                 st.session_state.c_ab_val = numerator / denominator
                 st.session_state.kappa_values = calculate_kappa2(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
             elif st.session_state.target_distribution_name == 'target_distribution5':
-                st.session_state.kappa_values = calculate_kappa5(r_list, st.session_state.scaling_factor, st.session_state.geta)
-            elif st.session_state.target_distribution_name == 'target_distribution6':
-                st.session_state.kappa_values = calculate_kappa6(r_list, st.session_state.scaling_factor, st.session_state.geta)
+                a_squared_plus_one = st.session_state.a ** 2 + 1
+                b_plus_one = st.session_state.b + 1
+                b_minus_one = st.session_state.b - 1
+
+                c_numer = (a_squared_plus_one ** 2) * (st.session_state.b ** 2 + 2 * st.session_state.b + 2)
+                c_denom = 2 * ((a_squared_plus_one ** 2) * b_plus_one - a_squared_plus_one * b_minus_one - 2)
+                c = c_numer / c_denom
+                Cab_1 = b_minus_one / (a_squared_plus_one * b_plus_one)
+                Cab_2 = 2 / (a_squared_plus_one ** 2 * b_plus_one)
+                Cab_3 = st.session_state.b ** 2 / (2 * b_plus_one * c)
+                Cab = Cab_1 + Cab_2 + Cab_3
+                st.session_state.kappa_values = calculate_kappa3(r_list, st.session_state.scaling_factor, st.session_state.a, st.session_state.b, c, Cab, st.session_state.geta)
+            elif st.session_state.target_distribution_name == 'target_distribution01':
+                st.session_state.kappa_values = calculate_kappa01(r_list, st.session_state.scaling_factor, st.session_state.geta)
+            elif st.session_state.target_distribution_name == 'target_distribution005':
+                st.session_state.kappa_values = calculate_kappa005(r_list, st.session_state.scaling_factor, st.session_state.geta)
             else:
                 st.session_state.kappa_values = calculate_sigmoid_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
 
