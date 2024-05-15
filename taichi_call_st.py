@@ -30,7 +30,7 @@ def toroidal_distance(length, p1, p2):
 
 def initialize_parameters():
     st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 2)
-    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution_sigmoid"])
+    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution5", "target_distribution6", "target_distribution_sigmoid"])
     st.session_state.a = st.sidebar.number_input("a", 0.0, 10.0, np.pi)
     st.session_state.b = st.sidebar.number_input("b", 0.0, 5.0, 0.25)
     st.session_state.c = st.sidebar.number_input("c", 0.0, 5.0, 0.1, step=0.001)
@@ -39,7 +39,7 @@ def initialize_parameters():
     st.session_state.r_threshold = st.sidebar.number_input("r Threshold", 0.0, 1.0, 0.001)
     st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 10000000, 10000)
     st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 10000000, 10000)
-    st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 10000, 1000)
+    st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 100000, 1000)
     st.session_state.scaling_factor = st.sidebar.number_input("Scaling Factor", 0.0, 100.0, 50.0, step=0.5)
     st.session_state.geta = st.sidebar.number_input("Geta", 0.0, 30.0, 5.0, step=0.5)
     st.session_state.show_particles = st.sidebar.checkbox("Visualize Particles", False)
@@ -75,8 +75,7 @@ def calculate_maximal_c():
     t = np.sin(-st.session_state.a * st.session_state.b) - (Cab / 2)
 
     if st.session_state.target_distribution_name == 'target_distribution':
-        num_of_combinations = st.session_state.num_of_particles * (
-                    st.session_state.num_of_particles - 1) / 2
+        num_of_combinations = st.session_state.num_of_particles * ( st.session_state.num_of_particles - 1) / 2
         st.session_state.c = -1 / (t * num_of_combinations)
     elif st.session_state.target_distribution_name == 'target_distribution3':
         st.session_state.a = 5.0
@@ -122,6 +121,9 @@ def load_data():
     if os.path.exists('temp_folder/min_distance.txt'):
         with open('temp_folder/min_distance.txt', 'r') as f:
             st.session_state.min_distance = float(f.read())
+    if os.path.exists('temp_folder/average_acceptance_ratio.txt'):
+        with open('temp_folder/average_acceptance_ratio.txt', 'r') as f:
+            st.session_state.average_acceptance_ratio = float(f.read())
 
 def visualize_particles_with_plotly():
     df_list = []
@@ -179,6 +181,23 @@ def calculate_sigmoid_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
     b = -7.20859488125615
     return scaling_factor * (c * sigmoid_formula + b) + geta
 
+def calculate_kappa5(r_list, scaling_factor, geta):
+    kappa_values = []
+    for i in range(len(r_list)):
+        if r_list[i] < 0.1:
+            kappa_values.append(0.0)
+        else:
+            kappa_values.append(scaling_factor * (-1 * np.exp(-3*(r_list[i]-0.1)) * np.cos(10*(r_list[i]-0.1))) + geta)
+    return kappa_values
+
+def calculate_kappa6(r_list, scaling_factor, geta):
+    kappa_values = []
+    for i in range(len(r_list)):
+        if r_list[i] < 0.05:
+            kappa_values.append(0.0)
+        else:
+            kappa_values.append(scaling_factor * (-1 * np.exp(-5*(r_list[i]-0.05)) * np.cos(22*(r_list[i]-0.05))) + geta)
+    return kappa_values
 
 def visualize_histogram():
     if st.session_state.distances is not None:
@@ -221,6 +240,10 @@ def visualize_histogram():
                 denominator = (1 + st.session_state.a ** 2) ** 2
                 st.session_state.c_ab_val = numerator / denominator
                 st.session_state.kappa_values = calculate_kappa2(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
+            elif st.session_state.target_distribution_name == 'target_distribution5':
+                st.session_state.kappa_values = calculate_kappa5(r_list, st.session_state.scaling_factor, st.session_state.geta)
+            elif st.session_state.target_distribution_name == 'target_distribution6':
+                st.session_state.kappa_values = calculate_kappa6(r_list, st.session_state.scaling_factor, st.session_state.geta)
             else:
                 st.session_state.kappa_values = calculate_sigmoid_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
 
@@ -387,6 +410,7 @@ def main():
         )
         load_data()
         st.info(f"Calculation Time: {st.session_state.calc_time:.2f} sec")
+        st.info(f"Average Acceptance Ratio: {st.session_state.average_acceptance_ratio:.3f}%")
 
     if st.session_state.current_particles is not None and st.session_state.plotly:
         visualize_particles_with_plotly()

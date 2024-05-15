@@ -29,7 +29,11 @@ class MetropolisHastings:
         self.acceptance_ratio_calculation_with_log = acceptance_ratio_calculation_with_log
 
         # 前のステップの確率密度関数の値を保存する変数
-        self.current_prob = ti.field(dtype=ti.f32, shape=(num_of_independent_trials))
+        self.current_prob = ti.field(dtype=ti.f32, shape=num_of_independent_trials)
+
+        # どれくらいacceptanceされたかを保存する変数
+        self.average_acceptance = ti.field(dtype=ti.f32, shape=num_of_independent_trials)
+
 
     @ti.kernel
     def initialize_particles(self):
@@ -266,6 +270,62 @@ class MetropolisHastings:
         return val
 
     @ti.func
+    def target_distribution5(self, trial_idx, is_proposed=False):
+
+        # It is clear that first_order_term should be 1.0,
+        # but we dare to calculate it for the understanding of the paper.
+
+        area = 1.0
+        first_order_term = 1.0
+        for i in range(self.num_of_particles):
+            first_order_term *= 1 / area
+
+        # calculate second_order_term
+        second_order_term = 1.0
+        for k in range(self.num_of_particles):
+            for l in range(k + 1, self.num_of_particles):
+                x1 = self.proposed_particles[trial_idx, k] if is_proposed else self.current_particles[trial_idx, k]
+                x2 = self.proposed_particles[trial_idx, l] if is_proposed else self.current_particles[trial_idx, l]
+                r = self.toroidal_distance(1.0, x1, x2)
+                kappa_relu = -1 if r <= 0.1 else -1 * ti.exp(-3 * (r - 0.1)) * ti.cos(10 * (r - 0.1))
+                second_order_term *= (1.0 + kappa_relu)
+
+        val = first_order_term * second_order_term
+
+        if val < 0:
+            print(f'val is a negative value: {val}')
+
+        return val
+
+    @ti.func
+    def target_distribution6(self, trial_idx, is_proposed=False):
+
+        # It is clear that first_order_term should be 1.0,
+        # but we dare to calculate it for the understanding of the paper.
+
+        area = 1.0
+        first_order_term = 1.0
+        for i in range(self.num_of_particles):
+            first_order_term *= 1 / area
+
+        # calculate second_order_term
+        second_order_term = 1.0
+        for k in range(self.num_of_particles):
+            for l in range(k + 1, self.num_of_particles):
+                x1 = self.proposed_particles[trial_idx, k] if is_proposed else self.current_particles[trial_idx, k]
+                x2 = self.proposed_particles[trial_idx, l] if is_proposed else self.current_particles[trial_idx, l]
+                r = self.toroidal_distance(1.0, x1, x2)
+                kappa_relu = -1 if r <= 0.05 else -1 * ti.exp(-5 * (r - 0.05)) * ti.cos(22 * (r - 0.05))
+                second_order_term *= (1.0 + kappa_relu)
+
+        val = first_order_term * second_order_term
+
+        if val < 0:
+            print(f'val is a negative value: {val}')
+
+        return val
+
+    @ti.func
     def calculate_acceptance_direct(self, prob_current, prob_proposed):
         # Calculate the acceptance ratio
         acceptance_ratio = prob_proposed / prob_current
@@ -284,8 +344,13 @@ class MetropolisHastings:
     @ti.func
     def sample_from_proposal_distribution(self, independent_trial_idx):
         for i in range(self.num_of_particles):
-            val_x = (ti.random(dtype=ti.f32) - 0.5) * self.proposal_std
-            val_y = (ti.random(dtype=ti.f32) - 0.5) * self.proposal_std
+            # -0.5 to 0.5
+            # val_x = (ti.random(dtype=ti.f32) - 0.5) * self.proposal_std
+            # val_y = (ti.random(dtype=ti.f32) - 0.5) * self.proposal_std
+
+            # -0.25 to 0.25
+            val_x = ((ti.random(dtype=ti.f32) - 0.5) / 2) * self.proposal_std
+            val_y = ((ti.random(dtype=ti.f32) - 0.5) / 2) * self.proposal_std
 
             self.proposed_particles[independent_trial_idx, i][0] = (self.current_particles[independent_trial_idx, i][0] + val_x) % 1.0
             self.proposed_particles[independent_trial_idx, i][1] = (self.current_particles[independent_trial_idx, i][1] + val_y) % 1.0
@@ -309,6 +374,10 @@ class MetropolisHastings:
                 prob = self.target_distribution3(trial_idx, is_proposed)
         elif self.target_distribution_name == 'target_distribution4':
             prob = self.target_distribution4(trial_idx, is_proposed)
+        elif self.target_distribution_name == 'target_distribution5':
+            prob = self.target_distribution5(trial_idx, is_proposed)
+        elif self.target_distribution_name == 'target_distribution6':
+            prob = self.target_distribution6(trial_idx, is_proposed)
         elif self.target_distribution_name == 'target_distribution_sigmoid':
             prob = self.target_distribution_sigmoid(trial_idx, is_proposed)
         else:
@@ -349,6 +418,7 @@ class MetropolisHastings:
             acceptance_ratio = self.calculate_acceptance_ratio(trial_idx, proposed_prob)
 
             if acceptance_ratio >= 1.0 or ti.random(dtype=ti.f32) < acceptance_ratio:
+                self.average_acceptance[trial_idx] += 1.0
                 for particle_idx in range(self.num_of_particles):
                     self.current_particles[trial_idx, particle_idx] = self.proposed_particles[trial_idx, particle_idx]
                 self.current_prob[trial_idx] = proposed_prob
@@ -402,8 +472,15 @@ def perform_calculations(args):
 
     current_particles = MH.current_particles.to_numpy()
 
+    # calculate the average acceptance ratio
+    average_acceptance_ratio = (MH.average_acceptance.to_numpy().mean() / args.num_of_iterations_for_each_trial) * 100
+
     np.save('temp_folder/result_particles.npy', result_particles)
     np.save('temp_folder/current_particles.npy', current_particles)
+
+    # Save average acceptance ratio to a file
+    with open('temp_folder/average_acceptance_ratio.txt', 'w') as f:
+        f.write(str(average_acceptance_ratio))
 
     # Save calculation time to a file
     with open('temp_folder/calc_time.txt', 'w') as f:
