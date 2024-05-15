@@ -8,9 +8,12 @@ import numpy as np
 
 from tqdm import tqdm
 
+
 @ti.data_oriented
 class MetropolisHastings:
-    def __init__(self, num_of_particles, a, b, c, s, proposal_std, num_of_independent_trials, target_distribution_name='target_distribution', acceptance_ratio_calculation_with_log=False):
+    def __init__(self, num_of_particles, a, b, c, s, proposal_std, num_of_independent_trials,
+                 target_distribution_name='target_distribution', acceptance_ratio_calculation_with_log=False,
+                 record_from_first_acceptance=False):
         self.a = a
         self.b = b
         self.c = c
@@ -27,6 +30,10 @@ class MetropolisHastings:
 
         # logを使ったacceptance ratioの計算を行うかどうか
         self.acceptance_ratio_calculation_with_log = acceptance_ratio_calculation_with_log
+
+        # 最初のacceptanceが起こった時点から記録を行うかどうか
+        self.record_from_first_acceptance = record_from_first_acceptance
+        self.count_of_acceptance = ti.field(dtype=ti.i32, shape=num_of_independent_trials)
 
         # 前のステップの確率密度関数の値を保存する変数
         self.current_prob = ti.field(dtype=ti.f32, shape=num_of_independent_trials)
@@ -142,7 +149,6 @@ class MetropolisHastings:
 
         return log_val
 
-
     @ti.func
     def target_distribution_sigmoid(self, trial_idx, is_proposed=False):
         # It is clear that first_order_term should be 1.0,
@@ -177,7 +183,7 @@ class MetropolisHastings:
     def target_distribution3(self, trial_idx, is_proposed=False):
         sin_ab = ti.sin(self.a * self.b)
         cos_ab = ti.cos(self.a * self.b)
-        numerator = 2 * self.a * cos_ab - (1 - self.a**2) * sin_ab
+        numerator = 2 * self.a * cos_ab - (1 - self.a ** 2) * sin_ab
         denominator = (1 + self.a ** 2) ** 2
         Cab = numerator / denominator
 
@@ -206,11 +212,12 @@ class MetropolisHastings:
             print(f'val is a negative value: {val}')
 
         return val
+
     @ti.func
     def target_distribution3_log(self, trial_idx, is_proposed=False):
         sin_ab = ti.sin(self.a * self.b)
         cos_ab = ti.cos(self.a * self.b)
-        numerator = 2 * self.a * cos_ab - (1 - self.a**2) * sin_ab
+        numerator = 2 * self.a * cos_ab - (1 - self.a ** 2) * sin_ab
         denominator = (1 + self.a ** 2) ** 2
         Cab = numerator / denominator
 
@@ -240,7 +247,7 @@ class MetropolisHastings:
     def target_distribution4(self, trial_idx, is_proposed=False):
         sin_ab = ti.sin(self.a * self.b)
         cos_ab = ti.cos(self.a * self.b)
-        numerator = 2 * self.a * cos_ab - (1 - self.a**2) * sin_ab
+        numerator = 2 * self.a * cos_ab - (1 - self.a ** 2) * sin_ab
         denominator = (1 + self.a ** 2) ** 2
         Cab = numerator / denominator
 
@@ -440,6 +447,12 @@ class MetropolisHastings:
 
     @ti.func
     def calculate_acceptance_direct(self, prob_current, prob_proposed):
+        # Avoid division by zero
+        if prob_proposed == 0.0 and prob_current == 0.0:
+            acceptance_ratio = 0.0
+        elif prob_proposed > 0.0 and prob_current == 0.0:
+            acceptance_ratio = 1.0
+
         # Calculate the acceptance ratio
         acceptance_ratio = prob_proposed / prob_current
         return acceptance_ratio
@@ -471,8 +484,10 @@ class MetropolisHastings:
             val_x = ((ti.random(dtype=ti.f32) - 0.5) / 2) * self.proposal_std
             val_y = ((ti.random(dtype=ti.f32) - 0.5) / 2) * self.proposal_std
 
-            self.proposed_particles[independent_trial_idx, i][0] = (self.current_particles[independent_trial_idx, i][0] + val_x) % 1.0
-            self.proposed_particles[independent_trial_idx, i][1] = (self.current_particles[independent_trial_idx, i][1] + val_y) % 1.0
+            self.proposed_particles[independent_trial_idx, i][0] = (self.current_particles[independent_trial_idx, i][
+                                                                        0] + val_x) % 1.0
+            self.proposed_particles[independent_trial_idx, i][1] = (self.current_particles[independent_trial_idx, i][
+                                                                        1] + val_y) % 1.0
 
     @ti.func
     def calculate_probability(self, trial_idx, is_proposed=False):
@@ -513,6 +528,11 @@ class MetropolisHastings:
         else:
             print('Invalid target distribution name')
 
+        # check prob is nan
+        if self.isnan(prob):
+            # print(f'prob({prob}) is nan at trial_idx: {trial_idx}, is_proposed: {is_proposed}')
+            prob = 0.0
+
         return prob
 
     @ti.func
@@ -538,13 +558,26 @@ class MetropolisHastings:
             acceptance_ratio = self.calculate_acceptance_log(current_prob, proposed_prob)
         else:
             acceptance_ratio = self.calculate_acceptance_direct(current_prob, proposed_prob)
-        
+
         return acceptance_ratio
 
     @ti.kernel
     def calculate_initial_probability(self):
         for trial_idx in range(self.num_of_independent_trials):
             self.current_prob[trial_idx] = self.calculate_probability(trial_idx)
+
+    @ti.kernel
+    def initialize_count_of_acceptance(self):
+        for i in range(self.num_of_independent_trials):
+            self.count_of_acceptance[i] = 0
+
+    @ti.kernel
+    def check_all_accepted(self) -> ti.i32:
+        all_accepted = 1
+        for i in range(self.num_of_independent_trials):
+            if self.count_of_acceptance[i] == 0:
+                all_accepted = 0
+        return all_accepted
 
     @ti.kernel
     def compute_mh(self):
@@ -558,7 +591,12 @@ class MetropolisHastings:
                 for particle_idx in range(self.num_of_particles):
                     self.current_particles[trial_idx, particle_idx] = self.proposed_particles[trial_idx, particle_idx]
                 self.current_prob[trial_idx] = proposed_prob
+                self.count_of_acceptance[trial_idx] += 1
+                # print(f'Accept at trial_idx: {trial_idx}, count_of_acceptance: {self.count_of_acceptance[trial_idx]}')
 
+    @ti.func
+    def isnan(self, x):
+        return not (x < 0 or 0 < x or x == 0)
 
 def toroidal_distance(length, p1, p2):
     dx = abs(p2[0] - p1[0])
@@ -571,6 +609,7 @@ def toroidal_distance(length, p1, p2):
 
     return math.sqrt(dx ** 2 + dy ** 2)
 
+
 def initialize_particles(mh):
     print('Initializing particles')
     mh.initialize_particles()
@@ -580,6 +619,7 @@ def initialize_particles(mh):
     # Calculate the initial probability
     mh.calculate_initial_probability()
     print(f'Calculating initial probability: {mh.current_prob.to_numpy()}')
+
 
 def perform_calculations(args):
     MH = MetropolisHastings(
@@ -591,14 +631,45 @@ def perform_calculations(args):
         args.proposal_std,
         args.num_of_independent_trials,
         args.target_distribution_name,
-        args.acceptance_ratio_calculation_with_log
+        args.acceptance_ratio_calculation_with_log,
+        args.record_from_first_acceptance
     )
     print(f'acceptance_ratio_calculation_with_log: {args.acceptance_ratio_calculation_with_log}')
+    print(f'record_from_first_acceptance: {args.record_from_first_acceptance}')
     initialize_particles(MH)
+    MH.initialize_count_of_acceptance()
 
     # Perform calculations
     taichi_start = time.time()
     result_particles = []
+
+    # burn-in
+    # 全ての独立スレッドで，current_probが0より大きくなるまでサンプリングを続ける
+    count = 0
+    while MH.record_from_first_acceptance:
+        MH.compute_mh()
+        count += 1
+        if count % 10000 == 0:
+            count_of_acceptance = MH.count_of_acceptance.to_numpy()
+            # 多い順にソート
+            count_of_acceptance.sort()
+
+            # 0の数を数える
+            count_of_zeros = 0
+            for i in range(len(count_of_acceptance)):
+                if count_of_acceptance[i] == 0:
+                    count_of_zeros += 1
+                else:
+                    break
+            print(f'count: {count}')
+            print(f'count_of_zeros: {count_of_zeros} / {args.num_of_independent_trials}')
+
+            # print(f'count_of_acceptance: {count_of_acceptance}')
+
+        if MH.check_all_accepted():
+            print(f'All accepted at count: {count}')
+            break
+
     for trial_idx in tqdm(range(args.num_of_iterations_for_each_trial)):
         MH.compute_mh()
         if trial_idx % args.num_of_sampling_strides == 0 and trial_idx != 0:
@@ -619,6 +690,7 @@ def perform_calculations(args):
     # Save calculation time to a file
     with open('temp_folder/calc_time.txt', 'w') as f:
         f.write(str(calc_time))
+
 
 def calculate_distances():
     result_particles = np.load('temp_folder/result_particles.npy')
@@ -644,6 +716,7 @@ def calculate_distances():
     with open('temp_folder/min_distance.txt', 'w') as f:
         f.write(str(min_distance))
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--num_of_particles', type=int, default=2)
@@ -657,6 +730,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_of_iterations_for_each_trial', type=int, default=10000)
     parser.add_argument('--num_of_sampling_strides', type=int, default=1000)
     parser.add_argument('--acceptance_ratio_calculation_with_log', action='store_true', default=False)
+    parser.add_argument('--record_from_first_acceptance', action='store_true', default=False)
     arguments = parser.parse_args()
 
     print(f'Arguments: {arguments}')
@@ -669,4 +743,3 @@ if __name__ == "__main__":
 
     perform_calculations(arguments)
     calculate_distances()
-

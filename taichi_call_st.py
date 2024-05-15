@@ -30,24 +30,28 @@ def toroidal_distance(length, p1, p2):
 
 def initialize_parameters():
     st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 2)
-    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution5", "target_distribution01", "target_distribution005", "target_distribution_sigmoid"])
+    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution5", "target_distribution01", "target_distribution005", "target_distribution_sigmoid"], index=4)
     st.session_state.a = st.sidebar.number_input("a", 0.0, 20.0, np.pi)
     st.session_state.b = st.sidebar.number_input("b", 0.0, 5.0, 0.25)
+    st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 30)
+    st.session_state.a = st.sidebar.number_input("a", 0.0, 20.0, 3 * np.pi)
+    st.session_state.b = st.sidebar.number_input("b", 0.0, 5.0, 0.05)
     st.session_state.c = st.sidebar.number_input("c", 0.0, 5.0, 0.1, step=0.001)
     st.session_state.s = st.sidebar.number_input("s", 0.0, 5.0, 0.1)
-    st.session_state.proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 5.0, 1.0)
+    st.session_state.proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 5.0, 0.5)
     st.session_state.r_threshold = st.sidebar.number_input("r Threshold", 0.0, 1.0, 0.001)
     st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 10000000, 10000)
     st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 10000000, 10000)
     st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 1000000, 1000)
-    st.session_state.scaling_factor = st.sidebar.number_input("Scaling Factor", 0.0, 100.0, 50.0, step=0.5)
+    st.session_state.scaling_factor = st.sidebar.number_input("Scaling Factor", 0.0, 100.0, 5.0, step=0.5)
     st.session_state.geta = st.sidebar.number_input("Geta", 0.0, 30.0, 5.0, step=0.5)
     st.session_state.show_particles = st.sidebar.checkbox("Visualize Particles", False)
     st.session_state.each_particle = st.sidebar.checkbox("Visualize Each Particle Index", False)
     st.session_state.save_image = st.sidebar.checkbox("Save Image", False)
     st.session_state.plotly = st.sidebar.checkbox("Use Plotly", False)
     st.session_state.use_maximal_c = st.sidebar.checkbox("Use Maximal c", True)
-    st.session_state.acceptance_ratio_calculation_with_log = st.sidebar.checkbox("Calculate Acceptance Ratio with Log", True)
+    st.session_state.acceptance_ratio_calculation_with_log = st.sidebar.checkbox("Calculate Acceptance Ratio with Log", False)
+    st.session_state.record_from_first_acceptance = st.sidebar.checkbox("Record from First Acceptance", True)
 
     if 'mh_particles' not in st.session_state:
         st.session_state.current_particles = None
@@ -412,6 +416,7 @@ def main():
 
     if st.button('Calculate'):
         log_flag = "--acceptance_ratio_calculation_with_log" if st.session_state.acceptance_ratio_calculation_with_log else ""
+        record_flag = "--record_from_first_acceptance" if st.session_state.record_from_first_acceptance else ""
         # Run taichi_calculator.py using subprocess with virtual environment activation
         subprocess.run(
             f"{venv_activate} && python taichi_calculator.py "
@@ -425,7 +430,8 @@ def main():
             f"--target_distribution_name {st.session_state.target_distribution_name} "
             f"--num_of_iterations_for_each_trial {st.session_state.num_of_iterations_for_each_trial} "
             f"--num_of_sampling_strides {st.session_state.num_of_sampling_strides} "
-            f"{log_flag}",
+            f"{log_flag} "
+            f"{record_flag}",
             shell=True
         )
         load_data()
