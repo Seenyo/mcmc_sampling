@@ -636,39 +636,48 @@ def perform_calculations(args):
     )
     print(f'acceptance_ratio_calculation_with_log: {args.acceptance_ratio_calculation_with_log}')
     print(f'record_from_first_acceptance: {args.record_from_first_acceptance}')
-    initialize_particles(MH)
-    MH.initialize_count_of_acceptance()
+
+    # burn-inの試行数を設定（num_of_independent_trialsの1.1倍）
+    burn_in_trials = int(args.num_of_independent_trials * args.burn_in_multiplier)
+
+    print(f'burn_in_trials: {burn_in_trials}')
+
+    # burn-in用のMetropolisHastingsインスタンスを作成
+    MH_burn_in = MetropolisHastings(
+        args.num_of_particles,
+        args.a,
+        args.b,
+        args.c,
+        args.s,
+        args.proposal_std,
+        burn_in_trials,
+        args.target_distribution_name,
+        args.acceptance_ratio_calculation_with_log,
+        args.record_from_first_acceptance
+    )
+    initialize_particles(MH_burn_in)
+    MH_burn_in.initialize_count_of_acceptance()
+
+    # burn-in
+    count = 0
+    num_accepted = 0
+    while num_accepted < args.num_of_independent_trials:
+        MH_burn_in.compute_mh()
+        count += 1
+        if count % 10000 == 0:  # チェック間隔を調整
+            num_accepted = (MH_burn_in.count_of_acceptance.to_numpy() > 0).sum()
+            print(f'Accepted trials: {num_accepted} / {args.num_of_independent_trials}')
+
+    print(f'Burn-in finished at count: {count}')
+
+    # burn-inが終了したら、受理された粒子の位置をMHにコピー
+    accepted_indices = np.where(MH_burn_in.count_of_acceptance.to_numpy() > 0)[0][:args.num_of_independent_trials]
+    MH.current_particles.from_numpy(MH_burn_in.current_particles.to_numpy()[accepted_indices])
+    MH.current_prob.from_numpy(MH_burn_in.current_prob.to_numpy()[accepted_indices])
 
     # Perform calculations
     taichi_start = time.time()
     result_particles = []
-
-    # burn-in
-    # 全ての独立スレッドで，current_probが0より大きくなるまでサンプリングを続ける
-    count = 0
-    while MH.record_from_first_acceptance:
-        MH.compute_mh()
-        count += 1
-        if count % 10000 == 0:
-            count_of_acceptance = MH.count_of_acceptance.to_numpy()
-            # 多い順にソート
-            count_of_acceptance.sort()
-
-            # 0の数を数える
-            count_of_zeros = 0
-            for i in range(len(count_of_acceptance)):
-                if count_of_acceptance[i] == 0:
-                    count_of_zeros += 1
-                else:
-                    break
-            print(f'count: {count}')
-            print(f'count_of_zeros: {count_of_zeros} / {args.num_of_independent_trials}')
-
-            # print(f'count_of_acceptance: {count_of_acceptance}')
-
-        if MH.check_all_accepted():
-            print(f'All accepted at count: {count}')
-            break
 
     for trial_idx in tqdm(range(args.num_of_iterations_for_each_trial)):
         MH.compute_mh()
@@ -690,7 +699,6 @@ def perform_calculations(args):
     # Save calculation time to a file
     with open('temp_folder/calc_time.txt', 'w') as f:
         f.write(str(calc_time))
-
 
 def calculate_distances():
     result_particles = np.load('temp_folder/result_particles.npy')
@@ -731,6 +739,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_of_sampling_strides', type=int, default=1000)
     parser.add_argument('--acceptance_ratio_calculation_with_log', action='store_true', default=False)
     parser.add_argument('--record_from_first_acceptance', action='store_true', default=False)
+    parser.add_argument('--burn_in_multiplier', type=float, default=1.5)
     arguments = parser.parse_args()
 
     print(f'Arguments: {arguments}')
