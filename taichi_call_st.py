@@ -30,7 +30,7 @@ def toroidal_distance(length, p1, p2):
 
 def initialize_parameters():
     st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 2)
-    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution5", "target_distribution01", "target_distribution005", "target_distribution_sigmoid"], index=4)
+    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution5", "target_distribution01", "target_distribution005"], index=4)
     st.session_state.a = st.sidebar.number_input("a", 0.0, 20.0, 3 * np.pi)
     st.session_state.b = st.sidebar.number_input("b", 0.0, 5.0, 0.05)
     st.session_state.c = st.sidebar.number_input("c", 0.0, 5.0, 0.1, step=0.001)
@@ -42,14 +42,15 @@ def initialize_parameters():
     st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 10000000, 1000)
     st.session_state.scaling_factor = st.sidebar.number_input("Scaling Factor", 0.0, 100.0, 5.0, step=0.5)
     st.session_state.geta = st.sidebar.number_input("Geta", 0.0, 30.0, 5.0, step=0.5)
+    st.session_state.burn_in_multiplier = st.sidebar.number_input("Burn-in Multiplier", 1.0, 5.0, 1.5, step=0.1)
     st.session_state.show_particles = st.sidebar.checkbox("Visualize Particles", False)
     st.session_state.each_particle = st.sidebar.checkbox("Visualize Each Particle Index", False)
     st.session_state.save_image = st.sidebar.checkbox("Save Image", False)
     st.session_state.plotly = st.sidebar.checkbox("Use Plotly", False)
     st.session_state.use_maximal_c = st.sidebar.checkbox("Use Maximal c", True)
-    st.session_state.acceptance_ratio_calculation_with_log = st.sidebar.checkbox("Calculate Acceptance Ratio with Log", False)
+    st.session_state.acceptance_ratio_calculation_with_log = st.sidebar.checkbox("Calculate Acceptance Ratio with Log", True)
     st.session_state.record_from_first_acceptance = st.sidebar.checkbox("Record from First Acceptance", True)
-    st.session_state.burn_in_multiplier = st.sidebar.number_input("Burn-in Multiplier", 1.0, 5.0, 1.5, step=0.1)
+    st.session_state.use_metropolis_within_gibbs = st.sidebar.checkbox("Use Metropolis within Gibbs", True)
 
     if 'current_particles' not in st.session_state:
         st.session_state.current_particles = None
@@ -71,6 +72,8 @@ def initialize_parameters():
 
     if 'prev_geta' not in st.session_state:
         st.session_state.prev_geta = None
+
+    st.session_state.average_acceptance_ratio = 0.0
 
 def calculate_maximal_c():
     Cab = -(2 * ((1 - 3 * st.session_state.a ** 2) * np.sin(st.session_state.a * st.session_state.b) + st.session_state.a * (st.session_state.a ** 2 - 3) * np.cos(st.session_state.a * st.session_state.b))) / ((st.session_state.a ** 2 + 1) ** 3)
@@ -181,13 +184,6 @@ def calculate_kappa3(r_list, scaling_factor, a, b, c, Cab, geta):
     return scaling_factor * kappa2 + scaling_factor
 
 @st.cache_data
-def calculate_sigmoid_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
-    sigmoid_formula = 1 / (1 + np.exp(-r_list ** 2))
-    c = 12.4171897625123
-    b = -7.20859488125615
-    return scaling_factor * (c * sigmoid_formula + b) + geta
-
-@st.cache_data
 def calculate_kappa01(r_list, scaling_factor, geta):
     kappa_values = []
     for i in range(len(r_list)):
@@ -265,8 +261,6 @@ def visualize_histogram():
                 st.session_state.kappa_values = calculate_kappa01(r_list, st.session_state.scaling_factor, st.session_state.geta)
             elif st.session_state.target_distribution_name == 'target_distribution005':
                 st.session_state.kappa_values = calculate_kappa005(r_list, st.session_state.scaling_factor, st.session_state.geta)
-            else:
-                st.session_state.kappa_values = calculate_sigmoid_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
 
             st.session_state.prev_scaling_factor = st.session_state.scaling_factor
             st.session_state.prev_geta = st.session_state.geta
@@ -414,6 +408,7 @@ def main():
     if st.button('Calculate'):
         log_flag = "--acceptance_ratio_calculation_with_log" if st.session_state.acceptance_ratio_calculation_with_log else ""
         record_flag = "--record_from_first_acceptance" if st.session_state.record_from_first_acceptance else ""
+        use_metropolis_within_gibbs_flag = "--use_metropolis_within_gibbs" if st.session_state.use_metropolis_within_gibbs else ""
         # Run taichi_calculator.py using subprocess with virtual environment activation
         subprocess.run(
             f"{venv_activate} && python taichi_calculator.py "
@@ -423,13 +418,14 @@ def main():
             f"--c {st.session_state.c} "
             f"--s {st.session_state.s} "
             f"--proposal_std {st.session_state.proposal_std} "
-            f"--burn_in_multiplier {st.session_state.burn_in_multiplier} "
             f"--num_of_independent_trials {st.session_state.num_of_independent_trials} "
             f"--target_distribution_name {st.session_state.target_distribution_name} "
             f"--num_of_iterations_for_each_trial {st.session_state.num_of_iterations_for_each_trial} "
             f"--num_of_sampling_strides {st.session_state.num_of_sampling_strides} "
+            f"--burn_in_multiplier {st.session_state.burn_in_multiplier} "
             f"{log_flag} "
-            f"{record_flag}",
+            f"{record_flag} "
+            f"{use_metropolis_within_gibbs_flag}",
             shell=True
         )
         load_data()

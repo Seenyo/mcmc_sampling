@@ -4,16 +4,36 @@ import time
 import datetime
 import colorsys
 
+import imageio
 import streamlit as st
 import numpy as np
 import taichi as ti
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from matplotlib import pyplot as plt
 
 from stqdm import stqdm
 from vispy import scene
 from vispy.io import write_png
+
+def count_digits(n):
+    if n > 0:
+        return int(math.floor(math.log10(n))) + 1
+    elif n == 0:
+        return 1  # 0の桁数は1とする
+    else:
+        return int(math.floor(math.log10(-n))) + 1  # 負の数の場合
+
+
+def generate_intervals(num_of_iterations):
+    intervals = []
+    for i in range(num_of_iterations + 1):
+        if i % 10 ** (count_digits(i) - 1) == 0 and i >= 100:
+            intervals.append(i)
+
+    return intervals
+
 
 def toroidal_distance(length, p1, p2):
     dx = abs(p2[0] - p1[0])
@@ -157,8 +177,8 @@ def initialize_parameters():
     st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 10000000, 10000)
     st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 10000000, 10000)
     st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 10000, 1000)
-    st.session_state.scaling_factor = st.sidebar.slider("Scaling Factor", 0.0, 10000.0, 5000.0)
-    st.session_state.geta = st.sidebar.slider("Geta", 0.0, 10000.0, 5000.0)
+    st.session_state.scaling_factor = st.sidebar.slider("Scaling Factor", 0.0, 100.0, 50.0)
+    st.session_state.geta = st.sidebar.slider("Geta", 0.0, 10.0, 5.0)
     st.session_state.show_particles = st.sidebar.checkbox("Visualize Particles", False)
     st.session_state.each_particle = st.sidebar.checkbox("Visualize Each Particle Index", False)
     st.session_state.save_image = st.sidebar.checkbox("Save Image", False)
@@ -289,13 +309,72 @@ def perform_calculations():
         rgb = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
         st.session_state.colors[i] = rgb + (1.0,)
 
+    save_intervals = generate_intervals(st.session_state.num_of_iterations_for_each_trial)
+
+    st.session_state.distances = []
+    gif_images = []
     # Perform calculations
     taichi_start = time.time()
     st.session_state.result_particles = []
-    for trial_idx in stqdm(range(st.session_state.num_of_iterations_for_each_trial)):
+    for trial_idx in stqdm(range(st.session_state.num_of_iterations_for_each_trial + 1)):
         MH.compute_mh()
         if trial_idx % st.session_state.num_of_sampling_strides == 0 and trial_idx != 0:
             st.session_state.result_particles.append(MH.current_particles.to_numpy())
+            # calculate the distance between two particles
+            troi_dist = toroidal_distance(1.0, MH.current_particles[0, 0], MH.current_particles[0, 1])
+            st.session_state.distances.append(troi_dist)
+
+        if trial_idx in save_intervals:
+            # ヒストグラムを計算
+            n, bins, patches = plt.hist(st.session_state.distances, bins=1000, range=(0, 1), density=True)
+
+            # 階級値を計算（各ビンの中心値）
+            bin_centers = 0.5 * (bins[:-1] + bins[1:])
+
+            # 階級値でビンの値を割る
+            normalized_values = n / bin_centers
+
+            # 無限大になる可能性のある値を除外（最初のビンは除く）
+            normalized_values[0] = 0
+
+            # calculate kappa value
+            sin_ab = np.sin(st.session_state.a * st.session_state.b)
+            cos_ab = np.cos(st.session_state.a * st.session_state.b)
+            numerator = 2 * ((1 - 3 * st.session_state.a ** 2) * sin_ab + st.session_state.a * (
+                    st.session_state.a ** 2 - 3) * cos_ab)
+            denominator = (st.session_state.a ** 2 + 1) ** 3
+            c_ab_val = -1 * numerator / denominator
+
+            def kappa(r):
+                return 9.0 * st.session_state.c * np.exp(-1 * r / st.session_state.s) * (
+                            np.sin(
+                                st.session_state.a * (
+                                        r / st.session_state.s - st.session_state.b)) - c_ab_val * 0.5) + 6.3
+
+            r_list = np.linspace(st.session_state.r_threshold, math.sqrt(2) * 0.5, 1000)
+            kappa_values = [kappa(r) for r in r_list]
+
+            # 新しいヒストグラムをプロット
+            fig, ax = plt.subplots()
+            ax.bar(bin_centers, normalized_values, width=np.diff(bins), align='center', alpha=0.75)
+            # kappa
+            ax.plot(r_list, kappa_values, 'r-', label='Kappa Values')
+            ax.set_xlabel('Distance')
+            ax.set_ylabel('Normalized Density')
+            ax.set_xlim(st.session_state.r_threshold, math.sqrt(2) * 0.5)
+            # ylimの下限を0に設定
+            ax.set_ylim(0.0, 16.0)
+            ax.set_title(f'Sampling Distribution at Iteration {trial_idx}')
+
+            # フレームをメモリに保存
+            fig.canvas.draw()
+            image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')
+            image = image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            gif_images.append(image)
+            plt.close()
+
+
+    imageio.mimsave('animation.gif', gif_images, duration=0.5)
 
     st.session_state.calc_time = time.time() - taichi_start
 
@@ -376,35 +455,36 @@ def visualize_particles():
 
 def visualize_histogram():
     # Display the histogram with go
-    fig = go.Figure(data=[go.Histogram(x=st.session_state.distances, nbinsx=1000)])
-    fig.update_layout(title='Distance between Two Particles', xaxis_title='Distance', yaxis_title='Frequency')
+    # Display as a density plot
+    fig = go.Figure(data=[go.Histogram(x=st.session_state.distances, histnorm='density', nbinsx=1000)])
+    fig.update_layout(title='Distance between Two Particles', xaxis_title='Distance', yaxis_title='density')
     st.plotly_chart(fig, theme=None)
 
-    # Normalize the histogram
-    hist, bin_edges = np.histogram(st.session_state.distances, bins=1000)
+    # Normalize the histogram as a density plot
+    hist, bin_edges = np.histogram(st.session_state.distances, bins=1000, density=True)
     bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
-    filtered_bin_centers = bin_centers
 
-    normalized_hist = hist / filtered_bin_centers
+    normalized_hist = hist / bin_centers
 
     # calculate kappa value
     sin_ab = np.sin(st.session_state.a * st.session_state.b)
-    cos_ab = ti.cos(st.session_state.a * st.session_state.b)
+    cos_ab = np.cos(st.session_state.a * st.session_state.b)
     numerator = 2 * ((1 - 3 * st.session_state.a ** 2) * sin_ab + st.session_state.a * (
             st.session_state.a ** 2 - 3) * cos_ab)
     denominator = (st.session_state.a ** 2 + 1) ** 3
     c_ab_val = -1 * numerator / denominator
 
     def kappa(r):
-        return st.session_state.scaling_factor * st.session_state.c * np.exp(-1 * r / st.session_state.s) * (np.sin(
+        return 9.0 * st.session_state.c * np.exp(-1 * r / st.session_state.s) * (np.sin(
             st.session_state.a * (
-                    r / st.session_state.s - st.session_state.b)) - c_ab_val * 0.5) + st.session_state.geta
+                    r / st.session_state.s - st.session_state.b)) - c_ab_val * 0.5) + 7.0
 
-    kappa_values = [kappa(r) for r in filtered_bin_centers]
+    r_list = np.linspace(st.session_state.r_threshold, math.sqrt(2) * 0.5, 1000)
+    kappa_values = [kappa(r) for r in r_list]
 
-    fig = go.Figure(data=[go.Bar(x=bin_edges, y=normalized_hist)])
+    fig = go.Figure(data=[go.Bar(x=bin_centers, y=normalized_hist)])
     # kappa
-    fig.add_trace(go.Scatter(x=filtered_bin_centers, y=kappa_values, mode='lines', name='Kappa Values'))
+    fig.add_trace(go.Scatter(x=r_list, y=kappa_values, mode='lines', name='Kappa Values'))
     # ヒストグラムの表示範囲を設定, 最大値はdistancesの最大値
     fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
     fig.update_layout(title='Normalized Distance between Two Particles', xaxis_title='Distance', yaxis_title='Normalized Frequency')
