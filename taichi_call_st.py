@@ -49,7 +49,7 @@ def initialize_parameters():
     st.session_state.use_maximal_c = st.sidebar.checkbox("Use Maximal c", True)
     st.session_state.acceptance_ratio_calculation_with_log = st.sidebar.checkbox("Calculate Acceptance Ratio with Log", False)
     st.session_state.record_from_first_acceptance = st.sidebar.checkbox("Record from First Acceptance", True)
-    st.session_state.burn_in_multiplier = st.sidebar.number_input("Burn-in Multiplier", 1, 5, 1.5, step=0.1)
+    st.session_state.burn_in_multiplier = st.sidebar.number_input("Burn-in Multiplier", 1.0, 5.0, 1.5, step=0.1)
 
     if 'current_particles' not in st.session_state:
         st.session_state.current_particles = None
@@ -423,13 +423,13 @@ def main():
             f"--c {st.session_state.c} "
             f"--s {st.session_state.s} "
             f"--proposal_std {st.session_state.proposal_std} "
+            f"--burn_in_multiplier {st.session_state.burn_in_multiplier} "
             f"--num_of_independent_trials {st.session_state.num_of_independent_trials} "
             f"--target_distribution_name {st.session_state.target_distribution_name} "
             f"--num_of_iterations_for_each_trial {st.session_state.num_of_iterations_for_each_trial} "
             f"--num_of_sampling_strides {st.session_state.num_of_sampling_strides} "
             f"{log_flag} "
-            f"{record_flag}"
-            f"--burn_in_multiplier {st.session_state.burn_in_multiplier}",
+            f"{record_flag}",
             shell=True
         )
         load_data()

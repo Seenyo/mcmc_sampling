@@ -732,6 +732,7 @@ if __name__ == "__main__":
     parser.add_argument('--b', type=float, default=0.25)
     parser.add_argument('--c', type=float, default=0.1)
     parser.add_argument('--s', type=float, default=0.1)
+    parser.add_argument('--burn_in_multiplier', type=float, default=1.5)
     parser.add_argument('--proposal_std', type=float, default=1.0)
     parser.add_argument('--num_of_independent_trials', type=int, default=10000)
     parser.add_argument('--target_distribution_name', type=str, default='target_distribution')
@@ -739,7 +740,6 @@ if __name__ == "__main__":
     parser.add_argument('--num_of_sampling_strides', type=int, default=1000)
     parser.add_argument('--acceptance_ratio_calculation_with_log', action='store_true', default=False)
     parser.add_argument('--record_from_first_acceptance', action='store_true', default=False)
-    parser.add_argument('--burn_in_multiplier', type=float, default=1.5)
     arguments = parser.parse_args()
 
     print(f'Arguments: {arguments}')
