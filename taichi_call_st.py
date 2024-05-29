@@ -13,9 +13,9 @@ import math
 
 # 仮想環境のアクティベーションコマンド
 if os.name == 'nt':  # Windowsの場合
-    venv_activate = ".\\venv\\Scripts\\activate.bat"
+    venv_activate = ".\\.venv\\Scripts\\activate.bat"
 else:  # Unix系の場合
-    venv_activate = "source venv/bin/activate"
+    venv_activate = "source .venv/bin/activate"
 
 def toroidal_distance(length, p1, p2):
     dx = abs(p2[0] - p1[0])
@@ -30,25 +30,29 @@ def toroidal_distance(length, p1, p2):
 
 def initialize_parameters():
     st.session_state.num_of_particles = st.sidebar.number_input("Number of Particles", 1, 10000, 2)
-    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution_sigmoid"])
-    st.session_state.a = st.sidebar.number_input("a", 0.0, 10.0, np.pi)
-    st.session_state.b = st.sidebar.number_input("b", 0.0, 5.0, 0.25)
+    st.session_state.target_distribution_name = st.sidebar.selectbox("Target Distribution", ["target_distribution", "target_distribution2", "target_distribution3", "target_distribution4", "target_distribution5", "target_distribution01", "target_distribution005"], index=4)
+    st.session_state.a = st.sidebar.number_input("a", 0.0, 20.0, 3 * np.pi)
+    st.session_state.b = st.sidebar.number_input("b", 0.0, 5.0, 0.05)
     st.session_state.c = st.sidebar.number_input("c", 0.0, 5.0, 0.1, step=0.001)
     st.session_state.s = st.sidebar.number_input("s", 0.0, 5.0, 0.1)
-    st.session_state.proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 5.0, 1.0)
+    st.session_state.proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 5.0, 0.5)
     st.session_state.r_threshold = st.sidebar.number_input("r Threshold", 0.0, 1.0, 0.001)
-    st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 10000000, 10000)
-    st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 10000000, 10000)
-    st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 10000, 1000)
-    st.session_state.scaling_factor = st.sidebar.number_input("Scaling Factor", 0.0, 100.0, 50.0)
-    st.session_state.geta = st.sidebar.number_input("Geta", 0.0, 30.0, 5.0)
+    st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 1000000, 10000)
+    st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 100000000, 10000)
+    st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 10000000, 1000)
+    st.session_state.scaling_factor = st.sidebar.number_input("Scaling Factor", 0.0, 100.0, 5.0, step=0.5)
+    st.session_state.geta = st.sidebar.number_input("Geta", 0.0, 30.0, 5.0, step=0.5)
+    st.session_state.burn_in_multiplier = st.sidebar.number_input("Burn-in Multiplier", 1.0, 5.0, 1.5, step=0.1)
     st.session_state.show_particles = st.sidebar.checkbox("Visualize Particles", False)
     st.session_state.each_particle = st.sidebar.checkbox("Visualize Each Particle Index", False)
     st.session_state.save_image = st.sidebar.checkbox("Save Image", False)
     st.session_state.plotly = st.sidebar.checkbox("Use Plotly", False)
     st.session_state.use_maximal_c = st.sidebar.checkbox("Use Maximal c", True)
+    st.session_state.acceptance_ratio_calculation_with_log = st.sidebar.checkbox("Calculate Acceptance Ratio with Log", True)
+    st.session_state.record_from_first_acceptance = st.sidebar.checkbox("Record from First Acceptance", True)
+    st.session_state.use_metropolis_within_gibbs = st.sidebar.checkbox("Use Metropolis within Gibbs", True)
 
-    if 'mh_particles' not in st.session_state:
+    if 'current_particles' not in st.session_state:
         st.session_state.current_particles = None
 
     if 'result_particles' not in st.session_state:
@@ -69,15 +73,20 @@ def initialize_parameters():
     if 'prev_geta' not in st.session_state:
         st.session_state.prev_geta = None
 
+    st.session_state.average_acceptance_ratio = 0.0
+
 def calculate_maximal_c():
     Cab = -(2 * ((1 - 3 * st.session_state.a ** 2) * np.sin(st.session_state.a * st.session_state.b) + st.session_state.a * (st.session_state.a ** 2 - 3) * np.cos(st.session_state.a * st.session_state.b))) / ((st.session_state.a ** 2 + 1) ** 3)
     t = np.sin(-st.session_state.a * st.session_state.b) - (Cab / 2)
 
     if st.session_state.target_distribution_name == 'target_distribution':
-        num_of_combinations = st.session_state.num_of_particles * (
-                    st.session_state.num_of_particles - 1) / 2
+        num_of_combinations = st.session_state.num_of_particles * ( st.session_state.num_of_particles - 1) / 2
         st.session_state.c = -1 / (t * num_of_combinations)
     elif st.session_state.target_distribution_name == 'target_distribution3':
+        st.session_state.a = 5.0
+        st.session_state.b = 1.6
+        st.session_state.s = 1.6
+
         sin_ab = np.sin(st.session_state.a * st.session_state.b)
         cos_ab = np.cos(st.session_state.a * st.session_state.b)
         numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a**2) * sin_ab
@@ -117,22 +126,49 @@ def load_data():
     if os.path.exists('temp_folder/min_distance.txt'):
         with open('temp_folder/min_distance.txt', 'r') as f:
             st.session_state.min_distance = float(f.read())
+    if os.path.exists('temp_folder/average_acceptance_ratio.txt'):
+        with open('temp_folder/average_acceptance_ratio.txt', 'r') as f:
+            st.session_state.average_acceptance_ratio = float(f.read())
 
 def visualize_particles_with_plotly():
     df_list = []
-    for i, particles in enumerate(st.session_state.current_particles):
-        df_temp = pd.DataFrame(particles, columns=['x', 'y'])
-        df_temp['Particle Index'] = i % st.session_state.num_of_particles
-        df_list.append(df_temp)
+    # for i, particles in enumerate(st.session_state.current_particles):
+    #     df_temp = pd.DataFrame(particles, columns=['x', 'y'])
+    #     df_temp['Particle Index'] = i % st.session_state.num_of_particles
+    #     df_list.append(df_temp)
+    #
+    # df = pd.concat(df_list, ignore_index=True)
+    #
+    # fig = px.scatter(df, x='x', y='y', color='Particle Index',
+    #                  title='Metropolis-Hastings Algorithm Sampling with Colored Particles',
+    #                  range_x=[0, 1], range_y=[0, 1], width=700, height=700,
+    #                  color_continuous_scale=px.colors.qualitative.G10)
+    # fig.update_layout(yaxis_scaleanchor='x', xaxis_constrain='domain')
+    # st.plotly_chart(fig, theme=None)
 
-    df = pd.concat(df_list, ignore_index=True)
+    # st.session_state.current_particlesの最後の要素を取得
+    last_particles = st.session_state.current_particles[-1]
+    st.info(f'Number of Particles: {len(last_particles)}')
+    st.info(last_particles)
 
-    fig = px.scatter(df, x='x', y='y', color='Particle Index',
-                     title='Metropolis-Hastings Algorithm Sampling with Colored Particles',
-                     range_x=[0, 1], range_y=[0, 1], width=700, height=700,
-                     color_continuous_scale=px.colors.qualitative.G10)
-    fig.update_layout(yaxis_scaleanchor='x', xaxis_constrain='domain')
+    # last_particlesをplotlyで描画, 正方形の範囲, スケーリングを指定
+    fig = go.Figure()
+    for i in range(len(last_particles)):
+        fig.add_trace(go.Scatter(x=[last_particles[i][0]], y=[last_particles[i][1]], mode='markers', name=f'Particle {i}'))
+    fig.update_layout(title='Metropolis-Hastings Algorithm Sampling with Particles',
+                      xaxis_title='x',
+                      yaxis_title='y',
+                      xaxis_range=[0, 1],
+                      yaxis_range=[0, 1],
+                      xaxis=dict(constrain='domain'),
+                      yaxis=dict(scaleanchor='x')
+                      )
+    # 表示領域を正方形にする
+    fig.update_xaxes(range=[0, 1])
+    fig.update_yaxes(range=[0, 1], scaleanchor='x', scaleratio=1)
     st.plotly_chart(fig, theme=None)
+
+
 
 @st.cache_data
 def calculate_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
@@ -143,12 +179,29 @@ def calculate_kappa2(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
     return scaling_factor * c * np.exp(-1 * r_list / s) * (np.sin(a * (r_list / s - b)) - c_ab_val) + geta
 
 @st.cache_data
-def calculate_sigmoid_kappa(r_list, scaling_factor, c, s, a, b, c_ab_val, geta):
-    sigmoid_formula = 1 / (1 + np.exp(-r_list ** 2))
-    c = 12.4171897625123
-    b = -7.20859488125615
-    return scaling_factor * (c * sigmoid_formula + b) + geta
+def calculate_kappa3(r_list, scaling_factor, a, b, c, Cab, geta):
+    kappa2 = np.where(r_list < b, -1.0, c * np.exp(-(r_list - b)) * (-np.cos(a * (r_list - b)) + Cab))
+    return scaling_factor * kappa2 + scaling_factor
 
+@st.cache_data
+def calculate_kappa01(r_list, scaling_factor, geta):
+    kappa_values = []
+    for i in range(len(r_list)):
+        if r_list[i] < 0.1:
+            kappa_values.append(0.0)
+        else:
+            kappa_values.append(scaling_factor * (-1 * np.exp(-3*(r_list[i]-0.1)) * np.cos(10*(r_list[i]-0.1))) + geta)
+    return kappa_values
+
+@st.cache_data
+def calculate_kappa005(r_list, scaling_factor, geta):
+    kappa_values = []
+    for i in range(len(r_list)):
+        if r_list[i] < 0.05:
+            kappa_values.append(0.0)
+        else:
+            kappa_values.append(scaling_factor * (-1 * np.exp(-5*(r_list[i]-0.05)) * np.cos(22*(r_list[i]-0.05))) + scaling_factor)
+    return kappa_values
 
 def visualize_histogram():
     if st.session_state.distances is not None:
@@ -172,7 +225,7 @@ def visualize_histogram():
         if 'kappa_values' not in st.session_state:
             st.session_state.kappa_values = None
 
-        r_list = np.linspace(0, 5, 100)
+        r_list = np.linspace(0, 5, 500)
 
         if (st.session_state.scaling_factor != st.session_state.prev_scaling_factor) or (st.session_state.geta != st.session_state.prev_geta):
             if st.session_state.target_distribution_name == 'target_distribution' or st.session_state.target_distribution_name == 'target_distribution2':
@@ -191,8 +244,23 @@ def visualize_histogram():
                 denominator = (1 + st.session_state.a ** 2) ** 2
                 st.session_state.c_ab_val = numerator / denominator
                 st.session_state.kappa_values = calculate_kappa2(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
-            else:
-                st.session_state.kappa_values = calculate_sigmoid_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
+            elif st.session_state.target_distribution_name == 'target_distribution5':
+                a_squared_plus_one = st.session_state.a ** 2 + 1
+                b_plus_one = st.session_state.b + 1
+                b_minus_one = st.session_state.b - 1
+
+                c_numer = (a_squared_plus_one ** 2) * (st.session_state.b ** 2 + 2 * st.session_state.b + 2)
+                c_denom = 2 * ((a_squared_plus_one ** 2) * b_plus_one - a_squared_plus_one * b_minus_one - 2)
+                c = c_numer / c_denom
+                Cab_1 = b_minus_one / (a_squared_plus_one * b_plus_one)
+                Cab_2 = 2 / (a_squared_plus_one ** 2 * b_plus_one)
+                Cab_3 = st.session_state.b ** 2 / (2 * b_plus_one * c)
+                Cab = Cab_1 + Cab_2 + Cab_3
+                st.session_state.kappa_values = calculate_kappa3(r_list, st.session_state.scaling_factor, st.session_state.a, st.session_state.b, c, Cab, st.session_state.geta)
+            elif st.session_state.target_distribution_name == 'target_distribution01':
+                st.session_state.kappa_values = calculate_kappa01(r_list, st.session_state.scaling_factor, st.session_state.geta)
+            elif st.session_state.target_distribution_name == 'target_distribution005':
+                st.session_state.kappa_values = calculate_kappa005(r_list, st.session_state.scaling_factor, st.session_state.geta)
 
             st.session_state.prev_scaling_factor = st.session_state.scaling_factor
             st.session_state.prev_geta = st.session_state.geta
@@ -338,6 +406,9 @@ def main():
         calculate_maximal_c()
 
     if st.button('Calculate'):
+        log_flag = "--acceptance_ratio_calculation_with_log" if st.session_state.acceptance_ratio_calculation_with_log else ""
+        record_flag = "--record_from_first_acceptance" if st.session_state.record_from_first_acceptance else ""
+        use_metropolis_within_gibbs_flag = "--use_metropolis_within_gibbs" if st.session_state.use_metropolis_within_gibbs else ""
         # Run taichi_calculator.py using subprocess with virtual environment activation
         subprocess.run(
             f"{venv_activate} && python taichi_calculator.py "
@@ -350,10 +421,16 @@ def main():
             f"--num_of_independent_trials {st.session_state.num_of_independent_trials} "
             f"--target_distribution_name {st.session_state.target_distribution_name} "
             f"--num_of_iterations_for_each_trial {st.session_state.num_of_iterations_for_each_trial} "
-            f"--num_of_sampling_strides {st.session_state.num_of_sampling_strides}", shell=True
+            f"--num_of_sampling_strides {st.session_state.num_of_sampling_strides} "
+            f"--burn_in_multiplier {st.session_state.burn_in_multiplier} "
+            f"{log_flag} "
+            f"{record_flag} "
+            f"{use_metropolis_within_gibbs_flag}",
+            shell=True
         )
         load_data()
         st.info(f"Calculation Time: {st.session_state.calc_time:.2f} sec")
+        st.info(f"Average Acceptance Ratio: {st.session_state.average_acceptance_ratio:.3f}%")
 
     if st.session_state.current_particles is not None and st.session_state.plotly:
         visualize_particles_with_plotly()
