@@ -592,14 +592,14 @@ def toroidal_distance(length, p1, p2):
 
 
 def initialize_particles(mh, verbose=True):
-    print('Initializing particles')
+    if verbose: print('Initializing particles')
     mh.initialize_all_chain_particles()
     initial_particles = mh.init_particles.to_numpy()
     np.save('temp_folder/initial_particles.npy', initial_particles)
 
     # Calculate the initial probability
     mh.calculate_initial_probability()
-    if verbose: print(f'Calculating initial probability: {mh.current_prob.to_numpy()}')
+    if verbose: print(f'Calculating initial probability (10 chains from top): {mh.current_prob.to_numpy()[:10]}')
 
     mh.initialize_count_of_acceptance()
 
@@ -700,7 +700,7 @@ def perform_calculations(args):
                         args.num_of_particles * args.num_of_iterations_for_each_trial)) * 100)
     else:
         average_acceptance_ratio = (
-                                           MH.count_of_acceptance.to_numpy().mean() / args.num_of_iterations_for_each_trial) * 100
+                (MH.count_of_acceptance.to_numpy().mean() / args.num_of_iterations_for_each_trial) * 100)
 
     print(f'Average acceptance ratio: {average_acceptance_ratio}%')
 
