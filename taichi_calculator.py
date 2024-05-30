@@ -51,21 +51,6 @@ class MetropolisHastings:
                 self.current_particles[chain_idx, particle_idx] = self.init_particles[chain_idx, particle_idx]
 
     @ti.func
-    def initialize_single_chain_particles(self, chain_idx: int):
-        for particle_idx in range(self.num_of_particles):
-            self.init_particles[chain_idx, particle_idx] = ti.Vector(
-                [ti.random(dtype=ti.f32), ti.random(dtype=ti.f32)])
-            self.current_particles[chain_idx, particle_idx] = self.init_particles[chain_idx, particle_idx]
-
-    @ti.kernel
-    def reinitialize_unaccepted_chains(self):
-        # 一度も受理をされていないchainは、そのchainを再度初期化
-        for chain_idx in range(self.num_of_independent_trials):
-            if self.count_of_acceptance[chain_idx] == 0:
-                self.initialize_single_chain_particles(chain_idx)
-                self.current_prob[chain_idx] = self.calculate_probability(chain_idx, False)
-
-    @ti.func
     def toroidal_distance(self, length, p1, p2):
         dx = abs(p2[0] - p1[0])
         dy = abs(p2[1] - p1[1])
@@ -522,7 +507,6 @@ class MetropolisHastings:
 
         return prob
 
-
     @ti.func
     def calculate_acceptance_ratio(self, chain_idx, proposed_prob):
         current_prob = self.current_prob[chain_idx]
@@ -552,14 +536,6 @@ class MetropolisHastings:
     def initialize_count_of_acceptance(self):
         for i in range(self.num_of_independent_trials):
             self.count_of_acceptance[i] = 0
-
-    @ti.kernel
-    def check_all_accepted(self) -> ti.i32:
-        all_accepted = 1
-        for i in range(self.num_of_independent_trials):
-            if self.count_of_acceptance[i] == 0:
-                all_accepted = 0
-        return all_accepted
 
     def compute_mcmc(self):
         if self.use_metropolis_within_gibbs:
@@ -598,11 +574,9 @@ class MetropolisHastings:
                 else:
                     self.proposed_particles[chain_idx, particle_idx] = self.current_particles[chain_idx, particle_idx]
 
-
     @ti.func
     def isnan(self, x):
         return not (x < 0 or 0 < x or x == 0)
-
 
 
 def toroidal_distance(length, p1, p2):
@@ -617,7 +591,7 @@ def toroidal_distance(length, p1, p2):
     return math.sqrt(dx ** 2 + dy ** 2)
 
 
-def initialize_particles(mh):
+def initialize_particles(mh, verbose=True):
     print('Initializing particles')
     mh.initialize_all_chain_particles()
     initial_particles = mh.init_particles.to_numpy()
@@ -625,7 +599,9 @@ def initialize_particles(mh):
 
     # Calculate the initial probability
     mh.calculate_initial_probability()
-    print(f'Calculating initial probability: {mh.current_prob.to_numpy()}')
+    if verbose: print(f'Calculating initial probability: {mh.current_prob.to_numpy()}')
+
+    mh.initialize_count_of_acceptance()
 
 
 def perform_calculations(args):
@@ -667,24 +643,47 @@ def perform_calculations(args):
     initialize_particles(MH_burn_in)
     MH_burn_in.initialize_count_of_acceptance()
 
-    # burn-in
+    # burn-inを実行
     count = 0
     num_accepted = 0
+    accepted_particles = []
+    accepted_probs = []
+
     while num_accepted < args.num_of_independent_trials:
         MH_burn_in.compute_mcmc()
         count += 1
-        if count % 10000 == 0:  # チェック間隔を調整
-            num_accepted = (MH_burn_in.count_of_acceptance.to_numpy() > 0).sum()
-            print(f'Accepted trials: {num_accepted} / {args.num_of_independent_trials}')
-            # 一度も受理されていないchainの粒子を再初期化
-            MH_burn_in.reinitialize_unaccepted_chains()
+
+        # 10000回ごとにチェック
+        if count % args.num_of_sampling_strides == 0:
+            new_accepted_indices = np.where(MH_burn_in.count_of_acceptance.to_numpy() > 0)[0]
+
+            if new_accepted_indices.size > 0:
+                # 新しく受理されたサンプルを保存
+                accepted_particles.extend(MH_burn_in.current_particles.to_numpy()[new_accepted_indices])
+                accepted_probs.extend(MH_burn_in.current_prob.to_numpy()[new_accepted_indices])
+
+                # 受理されたサンプルの数を更新
+                num_accepted = len(accepted_particles)
+                print(f'num_accepted: {num_accepted} / {args.num_of_independent_trials} at count: {count}')
+
+                # 一度受理されたサンプルがargs.num_of_independent_trialsに達した場合
+                if num_accepted >= args.num_of_independent_trials:
+                    break
+
+            # 受理されないチェーンの粒子を再初期化
+            initialize_particles(MH_burn_in, False)
 
     print(f'Burn-in finished at count: {count}')
 
     # burn-inが終了したら、受理された粒子の位置をMHにコピー
-    accepted_indices = np.where(MH_burn_in.count_of_acceptance.to_numpy() > 0)[0][:args.num_of_independent_trials]
-    MH.current_particles.from_numpy(MH_burn_in.current_particles.to_numpy()[accepted_indices])
-    MH.current_prob.from_numpy(MH_burn_in.current_prob.to_numpy()[accepted_indices])
+    accepted_particles_array = np.array(accepted_particles[:args.num_of_independent_trials])
+    accepted_probs_array = np.array(accepted_probs[:args.num_of_independent_trials])
+
+    print(f'accepted_particles_array.shape: {accepted_particles_array.shape}')
+    print(f'accepted_probs_array: {accepted_probs_array}')
+
+    MH.current_particles.from_numpy(accepted_particles_array)
+    MH.current_prob.from_numpy(accepted_probs_array)
 
     # Perform calculations
     taichi_start = time.time()
@@ -698,9 +697,12 @@ def perform_calculations(args):
     if args.use_metropolis_within_gibbs:
         average_acceptance_ratio = (
                 (MH.count_of_acceptance.to_numpy().mean() / (
-                            args.num_of_particles * args.num_of_iterations_for_each_trial)) * 100)
+                        args.num_of_particles * args.num_of_iterations_for_each_trial)) * 100)
     else:
-        average_acceptance_ratio =(MH.count_of_acceptance.to_numpy().mean() / args.num_of_iterations_for_each_trial) * 100
+        average_acceptance_ratio = (
+                                           MH.count_of_acceptance.to_numpy().mean() / args.num_of_iterations_for_each_trial) * 100
+
+    print(f'Average acceptance ratio: {average_acceptance_ratio}%')
 
     calc_time = time.time() - taichi_start
 
