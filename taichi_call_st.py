@@ -327,11 +327,22 @@ def visualize_min_distance_particles():
             margin=dict(r=60)
         )
 
+        MinDistStr = f'Minimum Distance: {st.session_state.min_distance:.4e}'
+        NumOfParticlesStr = f'Number of Particles: {st.session_state.num_of_particles}'
+        IterationsPerTrialStr = f'Iterations per Trial: {st.session_state.num_of_iterations_for_each_trial}'
+        SamplingStridesStr = f'Sampling Strides: {st.session_state.num_of_sampling_strides}'
+        AverageAcceptanceRatioStr = f'Average Acceptance Ratio: {st.session_state.average_acceptance_ratio:.2f}%'
+
+        if st.session_state.use_metropolis_within_gibbs:
+            methodStr = 'Method: Metropolis within Gibbs'
+        else:
+            methodStr = 'Method: Metropolis-Hastings'
+
         fig.add_annotation(
             x=1.05,
             y=1.0,
             showarrow=False,
-            text=f'Minimum Distance: {st.session_state.min_distance:.4e}<br>Number of Particles: {st.session_state.num_of_particles}<br>Iterations per Trial: {st.session_state.num_of_iterations_for_each_trial}<br>Sampling Strides: {st.session_state.num_of_sampling_strides}<br>Average Acceptance Ratio: {st.session_state.average_acceptance_ratio:.2f}%',
+            text=f'{MinDistStr}<br>{NumOfParticlesStr}<br>{IterationsPerTrialStr}<br>{SamplingStridesStr}<br>{AverageAcceptanceRatioStr}<br>{methodStr}',
             xref='paper',
             yref='paper'
         )
