@@ -72,8 +72,8 @@ def initialize_parameters():
 
     if 'prev_geta' not in st.session_state:
         st.session_state.prev_geta = None
-
-    st.session_state.average_acceptance_ratio = 0.0
+    if 'average_acceptance_ratio' not in st.session_state:
+        st.session_state.average_acceptance_ratio = 0.0
 
 def calculate_maximal_c():
     Cab = -(2 * ((1 - 3 * st.session_state.a ** 2) * np.sin(st.session_state.a * st.session_state.b) + st.session_state.a * (st.session_state.a ** 2 - 3) * np.cos(st.session_state.a * st.session_state.b))) / ((st.session_state.a ** 2 + 1) ** 3)
@@ -331,7 +331,7 @@ def visualize_min_distance_particles():
             x=1.05,
             y=1.0,
             showarrow=False,
-            text=f'Minimum Distance: {st.session_state.min_distance:.4e}<br>Number of Particles: {st.session_state.num_of_particles}<br>Iterations per Trial: {st.session_state.num_of_iterations_for_each_trial}<br>Sampling Strides: {st.session_state.num_of_sampling_strides}',
+            text=f'Minimum Distance: {st.session_state.min_distance:.4e}<br>Number of Particles: {st.session_state.num_of_particles}<br>Iterations per Trial: {st.session_state.num_of_iterations_for_each_trial}<br>Sampling Strides: {st.session_state.num_of_sampling_strides}<br>Average Acceptance Ratio: {st.session_state.average_acceptance_ratio:.2f}%',
             xref='paper',
             yref='paper'
         )
