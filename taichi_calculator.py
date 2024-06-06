@@ -653,7 +653,6 @@ def perform_calculations(args):
         MH_burn_in.compute_mcmc()
         count += 1
 
-        # 10000回ごとにチェック
         if count % args.num_of_sampling_strides == 0:
             new_accepted_indices = np.where(MH_burn_in.count_of_acceptance.to_numpy() > 0)[0]
 
@@ -679,8 +678,8 @@ def perform_calculations(args):
     accepted_particles_array = np.array(accepted_particles[:args.num_of_independent_trials])
     accepted_probs_array = np.array(accepted_probs[:args.num_of_independent_trials])
 
-    print(f'accepted_particles_array.shape: {accepted_particles_array.shape}')
-    print(f'accepted_probs_array: {accepted_probs_array}')
+    # print(f'accepted_particles_array.shape: {accepted_particles_array.shape}')
+    # print(f'accepted_probs_array: {accepted_probs_array}')
 
     MH.current_particles.from_numpy(accepted_particles_array)
     MH.current_prob.from_numpy(accepted_probs_array)
@@ -688,11 +687,30 @@ def perform_calculations(args):
     # Perform calculations
     taichi_start = time.time()
     result_particles = []
+    prev_acceptance_rate = None
 
     for chain_idx in tqdm(range(args.num_of_iterations_for_each_trial)):
         MH.compute_mcmc()
         if chain_idx % args.num_of_sampling_strides == 0 and chain_idx != 0:
             result_particles.append(MH.current_particles.to_numpy())
+
+            # Calculate acceptance rate
+            if args.use_metropolis_within_gibbs:
+                acceptance_rate = ((MH.count_of_acceptance.to_numpy().mean() / (args.num_of_particles * (chain_idx + 1))) * 100)
+            else:
+                acceptance_rate = ((MH.count_of_acceptance.to_numpy().mean() / (chain_idx + 1)) * 100)
+
+            # Write acceptance rate to file
+            with open('temp_folder/acceptance_rate.txt', 'a') as f:
+                f.write(f'{acceptance_rate}\n')
+
+            # Calculate relative change of acceptance rate if previous rate exists
+            if prev_acceptance_rate is not None and prev_acceptance_rate > 0:
+                relative_change = abs(acceptance_rate - prev_acceptance_rate) / prev_acceptance_rate
+                with open('temp_folder/acceptance_rate_change.txt', 'a') as f:
+                    f.write(f'{relative_change}\n')
+
+            prev_acceptance_rate = acceptance_rate
 
     if args.use_metropolis_within_gibbs:
         average_acceptance_ratio = (
@@ -769,6 +787,11 @@ if __name__ == "__main__":
         os.makedirs(path)
 
     ti.init(arch=ti.cuda, random_seed=int(time.time()))
+
+    if os.path.exists('temp_folder/acceptance_rate.txt'):
+        os.remove('temp_folder/acceptance_rate.txt')
+    if os.path.exists('temp_folder/acceptance_rate_change.txt'):
+        os.remove('temp_folder/acceptance_rate_change.txt')
 
     perform_calculations(arguments)
     calculate_distances()

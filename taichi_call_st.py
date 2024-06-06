@@ -409,6 +409,32 @@ def visualize_particles():
             image_index = draw_particles(data_index, colors_index, filename, save=st.session_state.save_image)
             st.image(image_index)
 
+def visualize_acceptance_rate():
+    if os.path.exists('temp_folder/acceptance_rate.txt'):
+        acceptance_rates = []
+        with open('temp_folder/acceptance_rate.txt', 'r') as f:
+            for line in f:
+                acceptance_rates.append(float(line.strip()))
+
+        fig = go.Figure(data=go.Scatter(y=acceptance_rates))
+        fig.update_layout(title='Acceptance Rate over Iterations',
+                          xaxis_title='Iteration',
+                          yaxis_title='Acceptance Rate (%)')
+        st.plotly_chart(fig, theme=None)
+
+def visualize_acceptance_rate_change():
+    if os.path.exists('temp_folder/acceptance_rate_change.txt'):
+        acceptance_rate_changes = []
+        with open('temp_folder/acceptance_rate_change.txt', 'r') as f:
+            for line in f:
+                acceptance_rate_changes.append(float(line.strip()))
+
+        fig = go.Figure(data=go.Scatter(y=acceptance_rate_changes))
+        fig.update_layout(title='Relative Change of Acceptance Rate over Iterations',
+                          xaxis_title='Iteration',
+                          yaxis_title='Relative Change (%)')
+        st.plotly_chart(fig, theme=None)
+
 def main():
     st.title('Metropolis-Hastings Algorithm Sampling')
     initialize_parameters()
@@ -449,6 +475,8 @@ def main():
     if st.session_state.result_particles is not None:
         st.info(f'Sampled a total of {len(st.session_state.result_particles)} times in each independent trial.')
         visualize_min_distance_particles()
+        visualize_acceptance_rate()
+        visualize_acceptance_rate_change()
 
     if st.session_state.current_particles is not None and st.session_state.show_particles:
         visualize_particles()
