@@ -621,7 +621,7 @@ def perform_calculations(args):
     print(f'acceptance_ratio_calculation_with_log: {args.acceptance_ratio_calculation_with_log}')
     print(f'record_from_first_acceptance: {args.record_from_first_acceptance}')
 
-    # burn-inの試行数を設定（num_of_independent_trialsの1.1倍）
+    # burn-inの試行数を設定
     burn_in_trials = int(args.num_of_independent_trials * args.burn_in_multiplier)
 
     print(f'burn_in_trials: {burn_in_trials}')

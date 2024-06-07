@@ -1,8 +1,6 @@
 import os
 import streamlit as st
 import numpy as np
-import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from vispy import scene
 from vispy.io import write_png
@@ -52,41 +50,34 @@ def initialize_parameters():
     st.session_state.record_from_first_acceptance = st.sidebar.checkbox("Record from First Acceptance", True)
     st.session_state.use_metropolis_within_gibbs = st.sidebar.checkbox("Use Metropolis within Gibbs", True)
 
-    if 'current_particles' not in st.session_state:
-        st.session_state.current_particles = None
-
-    if 'result_particles' not in st.session_state:
-        st.session_state.result_particles = None
-
-    if 'distances' not in st.session_state:
-        st.session_state.distances = None
+    variables_to_initialize = [
+        'current_particles', 'result_particles', 'distances', 'min_distance_particles',
+        'prev_scaling_factor', 'prev_geta', 'average_acceptance_ratio', 'calc_time'
+    ]
+    for var in variables_to_initialize:
+        if var not in st.session_state:
+            st.session_state[var] = None
 
     if 'min_distance' not in st.session_state:
         st.session_state.min_distance = 1.0
 
-    if 'min_distance_particles' not in st.session_state:
-        st.session_state.min_distance_particles = None
-
-    if 'prev_scaling_factor' not in st.session_state:
-        st.session_state.prev_scaling_factor = None
-
-    if 'prev_geta' not in st.session_state:
-        st.session_state.prev_geta = None
-    if 'average_acceptance_ratio' not in st.session_state:
-        st.session_state.average_acceptance_ratio = 0.0
 
 def calculate_maximal_c():
     Cab = -(2 * ((1 - 3 * st.session_state.a ** 2) * np.sin(st.session_state.a * st.session_state.b) + st.session_state.a * (st.session_state.a ** 2 - 3) * np.cos(st.session_state.a * st.session_state.b))) / ((st.session_state.a ** 2 + 1) ** 3)
     t = np.sin(-st.session_state.a * st.session_state.b) - (Cab / 2)
 
-    if st.session_state.target_distribution_name == 'target_distribution':
-        num_of_combinations = st.session_state.num_of_particles * ( st.session_state.num_of_particles - 1) / 2
-        st.session_state.c = -1 / (t * num_of_combinations)
+    if st.session_state.target_distribution_name in ['target_distribution', 'target_distribution4']:
+        sin_ab = np.sin(st.session_state.a * st.session_state.b)
+        cos_ab = np.cos(st.session_state.a * st.session_state.b)
+        numerator = 2 * ((1 - 3 * st.session_state.a ** 2) * sin_ab + st.session_state.a * (st.session_state.a ** 2 - 3) * cos_ab)
+        denominator = (st.session_state.a ** 2 + 1) ** 3
+        Cab = -1 * numerator / denominator
+        num_of_combinations = st.session_state.num_of_particles * (st.session_state.num_of_particles - 1) / 2
+        st.session_state.c = -1 / ((np.sin(-st.session_state.a * st.session_state.b) - Cab) * num_of_combinations)
     elif st.session_state.target_distribution_name == 'target_distribution3':
         st.session_state.a = 5.0
         st.session_state.b = 1.6
         st.session_state.s = 1.6
-
         sin_ab = np.sin(st.session_state.a * st.session_state.b)
         cos_ab = np.cos(st.session_state.a * st.session_state.b)
         numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a**2) * sin_ab
@@ -94,57 +85,37 @@ def calculate_maximal_c():
         Cab = numerator / denominator
         st.info(f'Cab is {Cab}')
         st.session_state.c = -1 / (np.sin(-st.session_state.a * st.session_state.b) - Cab)
-    elif st.session_state.target_distribution_name == 'target_distribution4':
-        sin_ab = np.sin(st.session_state.a * st.session_state.b)
-        cos_ab = np.cos(st.session_state.a * st.session_state.b)
-        numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a ** 2) * sin_ab
-        denominator = (1 + st.session_state.a ** 2) ** 2
-        Cab = numerator / denominator
-        st.info(f'Cab is {Cab}')
-        num_of_combinations = st.session_state.num_of_particles * (st.session_state.num_of_particles - 1) / 2
-        st.session_state.c = -1 / ((np.sin(-st.session_state.a * st.session_state.b) - Cab) * num_of_combinations)
     else:
         st.session_state.c = -1 / t
     st.info(f'c is {st.session_state.c}')
 
 def load_data():
-    if os.path.exists('temp_folder/initial_particles.npy'):
-        st.session_state.initial_particles = np.load('temp_folder/initial_particles.npy')
-    if os.path.exists('temp_folder/result_particles.npy'):
-        st.session_state.result_particles = np.load('temp_folder/result_particles.npy')
-    if os.path.exists('temp_folder/current_particles.npy'):
-        st.session_state.current_particles = np.load('temp_folder/current_particles.npy')
-    if os.path.exists('temp_folder/calc_time.txt'):
-        with open('temp_folder/calc_time.txt', 'r') as f:
-            st.session_state.calc_time = float(f.read())
-    if os.path.exists('temp_folder/distances.npy'):
-        st.session_state.distances = np.load('temp_folder/distances.npy')
-    if os.path.exists('temp_folder/min_distance_particles.npy'):
-        st.session_state.min_distance_particles = np.load('temp_folder/min_distance_particles.npy')
-    if os.path.exists('temp_folder/min_distance_pair.npy'):
-        st.session_state.min_distance_pair = tuple(np.load('temp_folder/min_distance_pair.npy'))
-    if os.path.exists('temp_folder/min_distance.txt'):
-        with open('temp_folder/min_distance.txt', 'r') as f:
-            st.session_state.min_distance = float(f.read())
-    if os.path.exists('temp_folder/average_acceptance_ratio.txt'):
-        with open('temp_folder/average_acceptance_ratio.txt', 'r') as f:
-            st.session_state.average_acceptance_ratio = float(f.read())
+    # ファイルの存在チェックと読み込みを繰り返し行っているコードを、ループを使用して簡略化
+    files_to_load = [
+        ('temp_folder/initial_particles.npy', 'initial_particles', np.load),
+        ('temp_folder/result_particles.npy', 'result_particles', np.load),
+        ('temp_folder/current_particles.npy', 'current_particles', np.load),
+        ('temp_folder/distances.npy', 'distances', np.load),
+        ('temp_folder/min_distance_particles.npy', 'min_distance_particles', np.load),
+        ('temp_folder/min_distance_pair.npy', 'min_distance_pair', lambda x: tuple(np.load(x))),
+    ]
+
+    for file_path, var_name, load_func in files_to_load:
+        if os.path.exists(file_path):
+            st.session_state[var_name] = load_func(file_path)
+
+    files_to_read = [
+        ('temp_folder/calc_time.txt', 'calc_time', float),
+        ('temp_folder/min_distance.txt', 'min_distance', float),
+        ('temp_folder/average_acceptance_ratio.txt', 'average_acceptance_ratio', float),
+    ]
+
+    for file_path, var_name, cast_func in files_to_read:
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as f:
+                st.session_state[var_name] = cast_func(f.read())
 
 def visualize_particles_with_plotly():
-    df_list = []
-    # for i, particles in enumerate(st.session_state.current_particles):
-    #     df_temp = pd.DataFrame(particles, columns=['x', 'y'])
-    #     df_temp['Particle Index'] = i % st.session_state.num_of_particles
-    #     df_list.append(df_temp)
-    #
-    # df = pd.concat(df_list, ignore_index=True)
-    #
-    # fig = px.scatter(df, x='x', y='y', color='Particle Index',
-    #                  title='Metropolis-Hastings Algorithm Sampling with Colored Particles',
-    #                  range_x=[0, 1], range_y=[0, 1], width=700, height=700,
-    #                  color_continuous_scale=px.colors.qualitative.G10)
-    # fig.update_layout(yaxis_scaleanchor='x', xaxis_constrain='domain')
-    # st.plotly_chart(fig, theme=None)
 
     # st.session_state.current_particlesの最後の要素を取得
     last_particles = st.session_state.current_particles[-1]
@@ -290,6 +261,26 @@ def calculate_min_distance(result_particles):
 
     return distances, min_distance, min_distance_particles, min_distance_pair
 
+def add_annotation_to_plot(fig):
+    MinDistStr = f'Minimum Distance: {st.session_state.min_distance:.4e}'
+    NumOfParticlesStr = f'Number of Particles: {st.session_state.num_of_particles}'
+    IterationsPerTrialStr = f'Iterations per Trial: {st.session_state.num_of_iterations_for_each_trial}'
+    SamplingStridesStr = f'Sampling Strides: {st.session_state.num_of_sampling_strides}'
+    AverageAcceptanceRatioStr = f'Average Acceptance Ratio: {st.session_state.average_acceptance_ratio:.2f}%'
+
+    if st.session_state.use_metropolis_within_gibbs:
+        methodStr = 'Method: Metropolis within Gibbs'
+    else:
+        methodStr = 'Method: Metropolis-Hastings'
+
+    fig.add_annotation(
+        x=1.05,
+        y=1.0,
+        showarrow=False,
+        text=f'{MinDistStr}<br>{NumOfParticlesStr}<br>{IterationsPerTrialStr}<br>{SamplingStridesStr}<br>{AverageAcceptanceRatioStr}<br>{methodStr}',
+        xref='paper',
+        yref='paper'
+    )
 def visualize_min_distance_particles():
     if st.session_state.result_particles is not None:
         st.session_state.distances, st.session_state.min_distance, st.session_state.min_distance_particles, st.session_state.min_distance_pair = calculate_min_distance(st.session_state.result_particles)
@@ -327,25 +318,7 @@ def visualize_min_distance_particles():
             margin=dict(r=60)
         )
 
-        MinDistStr = f'Minimum Distance: {st.session_state.min_distance:.4e}'
-        NumOfParticlesStr = f'Number of Particles: {st.session_state.num_of_particles}'
-        IterationsPerTrialStr = f'Iterations per Trial: {st.session_state.num_of_iterations_for_each_trial}'
-        SamplingStridesStr = f'Sampling Strides: {st.session_state.num_of_sampling_strides}'
-        AverageAcceptanceRatioStr = f'Average Acceptance Ratio: {st.session_state.average_acceptance_ratio:.2f}%'
-
-        if st.session_state.use_metropolis_within_gibbs:
-            methodStr = 'Method: Metropolis within Gibbs'
-        else:
-            methodStr = 'Method: Metropolis-Hastings'
-
-        fig.add_annotation(
-            x=1.05,
-            y=1.0,
-            showarrow=False,
-            text=f'{MinDistStr}<br>{NumOfParticlesStr}<br>{IterationsPerTrialStr}<br>{SamplingStridesStr}<br>{AverageAcceptanceRatioStr}<br>{methodStr}',
-            xref='paper',
-            yref='paper'
-        )
+        add_annotation_to_plot(fig)
 
         st.plotly_chart(fig, theme=None)
 
@@ -435,6 +408,11 @@ def visualize_acceptance_rate_change():
                           yaxis_title='Relative Change (%)')
         st.plotly_chart(fig, theme=None)
 
+def set_flags():
+    log_flag = "--acceptance_ratio_calculation_with_log" if st.session_state.acceptance_ratio_calculation_with_log else ""
+    record_flag = "--record_from_first_acceptance" if st.session_state.record_from_first_acceptance else ""
+    use_metropolis_within_gibbs_flag = "--use_metropolis_within_gibbs" if st.session_state.use_metropolis_within_gibbs else ""
+    return log_flag, record_flag, use_metropolis_within_gibbs_flag
 def main():
     st.title('Metropolis-Hastings Algorithm Sampling')
     initialize_parameters()
@@ -443,9 +421,7 @@ def main():
         calculate_maximal_c()
 
     if st.button('Calculate'):
-        log_flag = "--acceptance_ratio_calculation_with_log" if st.session_state.acceptance_ratio_calculation_with_log else ""
-        record_flag = "--record_from_first_acceptance" if st.session_state.record_from_first_acceptance else ""
-        use_metropolis_within_gibbs_flag = "--use_metropolis_within_gibbs" if st.session_state.use_metropolis_within_gibbs else ""
+        log_flag, record_flag, use_metropolis_within_gibbs_flag = set_flags()
         # Run taichi_calculator.py using subprocess with virtual environment activation
         subprocess.run(
             f"{venv_activate} && python taichi_calculator.py "
