@@ -49,6 +49,7 @@ class MetropolisHastings:
                 self.init_particles[chain_idx, particle_idx] = ti.Vector(
                     [ti.random(dtype=ti.f32), ti.random(dtype=ti.f32)])
                 self.current_particles[chain_idx, particle_idx] = self.init_particles[chain_idx, particle_idx]
+                self.proposed_particles[chain_idx, particle_idx] = self.init_particles[chain_idx, particle_idx]
 
     @ti.func
     def toroidal_distance(self, length, p1, p2):
@@ -299,12 +300,10 @@ class MetropolisHastings:
                 x1 = self.proposed_particles[chain_idx, k] if is_proposed else self.current_particles[chain_idx, k]
                 x2 = self.proposed_particles[chain_idx, l] if is_proposed else self.current_particles[chain_idx, l]
                 r = self.toroidal_distance(1.0, x1, x2)
-                print(f'r({k}, {l}): {r} x1:({x1[0]}, {x1[1]}), x2:({x2[0]}, {x2[1]})', end=' ')
                 kappa2 = -1.0 if r < self.b else c * ti.exp(-(r - self.b)) * (-ti.cos(self.a * (r - self.b)) + Cab)
                 second_order_term *= (1.0 + kappa2)
 
         val = first_order_term * second_order_term
-        print(f'val: {val}')
 
         if val < -1e-5:
             print(f'val is a negative value: {val}')
@@ -471,9 +470,9 @@ class MetropolisHastings:
 
         px1 = self.proposed_particles[chain_idx, 0]
         px2 = self.proposed_particles[chain_idx, 1]
-        print(f'x, y: {x}, {y}')
-        print(f'Current particle at chain_idx: {chain_idx}, particle_idx: {particle_idx}, x1:({cx1[0]}, {cx1[1]}), x2:({cx2[0]}, {cx2[1]})')
-        print(f'Sampled particle at chain_idx: {chain_idx}, particle_idx: {particle_idx}, x1:({px1[0]}, {px1[1]}), x2:({px2[0]}, {px2[1]})')
+        # print(f'x, y: {x}, {y}')
+        # print(f'Current particle at chain_idx: {chain_idx}, particle_idx: {particle_idx}, x1:({cx1[0]}, {cx1[1]}), x2:({cx2[0]}, {cx2[1]})')
+        # print(f'Sampled particle at chain_idx: {chain_idx}, particle_idx: {particle_idx}, x1:({px1[0]}, {px1[1]}), x2:({px2[0]}, {px2[1]})')
 
     @ti.func
     def calculate_probability(self, chain_idx, is_proposed=False):
@@ -542,7 +541,7 @@ class MetropolisHastings:
     @ti.kernel
     def calculate_initial_probability(self):
         for chain_idx in range(self.num_of_chains):
-            self.current_prob[chain_idx] = self.calculate_probability(chain_idx, False)
+            self.current_prob[chain_idx] = self.calculate_probability(chain_idx, False )
 
     @ti.kernel
     def initialize_count_of_acceptance(self):
@@ -575,31 +574,16 @@ class MetropolisHastings:
         for chain_idx in range(self.num_of_chains):
             # Gibbs sampling
             for particle_idx in range(self.num_of_particles):
-                print('particle_idx: ', particle_idx)
                 self.sample_single_particle_from_proposal_distribution(chain_idx, particle_idx)
                 proposed_prob = self.calculate_probability(chain_idx, True)
                 acceptance_ratio = self.calculate_acceptance_ratio(chain_idx, proposed_prob)
-
-                # Helllo
-
-                cx1 = self.current_particles[chain_idx, 0]
-                cx2 = self.current_particles[chain_idx, 1]
-
-                px1 = self.proposed_particles[chain_idx, 0]
-                px2 = self.proposed_particles[chain_idx, 1]
-
-                print(f'chain_idx: {chain_idx}, particle_idx: {particle_idx}, current_particles: x1({cx1}), x2({cx2}), current_prob: {self.current_prob[chain_idx]}')
-                print(f'chain_idx: {chain_idx}, particle_idx: {particle_idx}, proposed_particles: x1({px1}, x2({px2}, proposed_prob: {proposed_prob}')
 
                 if acceptance_ratio >= 1.0 or ti.random(dtype=ti.f32) < acceptance_ratio:
                     self.current_particles[chain_idx, particle_idx] = self.proposed_particles[chain_idx, particle_idx]
                     self.current_prob[chain_idx] = proposed_prob
                     self.count_of_acceptance[chain_idx] += 1
-
-                    cx1 = self.current_particles[chain_idx, 0]
-                    cx2 = self.current_particles[chain_idx, 1]
-                    print(f'Accepted at chain_idx: {chain_idx}, particle_idx: {particle_idx}, current_particles: x1({cx1}), x2({cx2}), current_prob: {self.current_prob[chain_idx]}')
-
+                else:
+                    self.proposed_particles[chain_idx, particle_idx] = self.current_particles[chain_idx, particle_idx]
     @ti.func
     def isnan(self, x):
         return not (x < 0 or 0 < x or x == 0)
@@ -696,7 +680,6 @@ def perform_calculations(args):
     print('Burn-in started')
 
     while num_accepted < args.num_of_chains:
-        print(f'mutating at count: {count}')
         MH_burn_in.compute_mcmc()
         count += 1
 
@@ -726,17 +709,23 @@ def perform_calculations(args):
     accepted_particles_array = np.array(accepted_particles[:args.num_of_chains])
     accepted_probs_array = np.array(accepted_probs[:args.num_of_chains])
 
-    print(f'accepted_probs_array: {accepted_probs_array}')
+    print(f'accepted_probs_array(From top 10): {accepted_probs_array[:10]}')
 
-    MH = MH_burn_in
+    MH = MetropolisHastings(
+        args.num_of_particles,
+        args.a,
+        args.b,
+        args.c,
+        args.s,
+        args.proposal_std,
+        args.num_of_chains,
+        args.target_distribution_name,
+        args.acceptance_ratio_calculation_with_log,
+        args.record_from_first_acceptance,
+        args.use_metropolis_within_gibbs
+    )
     MH.current_particles.from_numpy(accepted_particles_array)
     MH.current_prob.from_numpy(accepted_probs_array)
-
-    MH.calculate_initial_probability()
-    print(f'Current particles: {MH.current_particles.to_numpy()}')
-    print(f'Calculating initial probability (10 chains from top): {MH.current_prob.to_numpy()}')
-
-    return None
 
     # Perform calculations
     taichi_start = time.time()
