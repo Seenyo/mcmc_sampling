@@ -580,6 +580,8 @@ class MetropolisHastings:
                 proposed_prob = self.calculate_probability(chain_idx, True)
                 acceptance_ratio = self.calculate_acceptance_ratio(chain_idx, proposed_prob)
 
+                # Helllo
+
                 cx1 = self.current_particles[chain_idx, 0]
                 cx2 = self.current_particles[chain_idx, 1]
 

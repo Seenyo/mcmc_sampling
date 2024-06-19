@@ -50,6 +50,8 @@ def initialize_parameters():
     st.session_state.record_from_first_acceptance = st.sidebar.checkbox("Record from First Acceptance", True)
     st.session_state.use_metropolis_within_gibbs = st.sidebar.checkbox("Use Metropolis within Gibbs", True)
 
+    # Hello
+
     variables_to_initialize = [
         'current_particles', 'result_particles', 'distances', 'min_distance_particles',
         'prev_scaling_factor', 'prev_geta', 'average_acceptance_ratio', 'calc_time'
