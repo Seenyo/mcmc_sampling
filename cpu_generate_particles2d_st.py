@@ -105,8 +105,8 @@ def initialize_parameters():
     st.session_state.s = st.sidebar.number_input("s", 0.0, 1.0, 0.1)
     st.session_state.proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 1.0, 0.1)
     st.session_state.r_threshold = st.sidebar.number_input("r Threshold", 0.0, 1.0, 0.01)
-    st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 1000000, 100)
-    st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 1000000, 10)
+    st.session_state.num_of_chains = st.sidebar.number_input("Number of Independent Trials", 1, 1000000, 100)
+    st.session_state.num_of_iterations_for_each_chain = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 1000000, 10)
     st.session_state.show_particles = st.sidebar.checkbox("Visualize Particles", False)
     st.session_state.each_particle = st.sidebar.checkbox("Visualize Each Particle Index", False)
     st.session_state.save_image = st.sidebar.checkbox("Save Image", False)
@@ -131,7 +131,7 @@ def perform_calculations():
         st.session_state.c,
         st.session_state.s,
         st.session_state.proposal_std,
-        st.session_state.num_of_independent_trials
+        st.session_state.num_of_chains
     )
     MH.initialize_particles()
 
@@ -145,7 +145,7 @@ def perform_calculations():
 
     # Perform calculations
     taichi_start = time.time()
-    for _ in stqdm(range(st.session_state.num_of_iterations_for_each_trial)):
+    for _ in stqdm(range(st.session_state.num_of_iterations_for_each_chain)):
         MH.compute_mh()
     st.session_state.calc_time = time.time() - taichi_start
 
@@ -154,7 +154,7 @@ def perform_calculations():
     st.info(len(st.session_state.result_particles))
 
     st.session_state.distances = []
-    for i in range(st.session_state.num_of_independent_trials):
+    for i in range(st.session_state.num_of_chains):
         # Calculate the distance between two particles
         for j in range(len(st.session_state.result_particles)):
             print(j)
@@ -236,7 +236,7 @@ def visualize_particles():
         for i in range(st.session_state.num_of_particles):
             data_index = np.array([chain[i] for chain in st.session_state.current_particles])
             colors_index = colors_all[i::st.session_state.num_of_particles]
-            filename = f'particles_index_{i}_trial_count_{st.session_state.num_of_independent_trials}_mh_steps_{st.session_state.num_of_iterations_for_each_trial}'
+            filename = f'particles_index_{i}_trial_count_{st.session_state.num_of_chains}_mh_steps_{st.session_state.num_of_iterations_for_each_chain}'
             image_index = draw_particles(data_index, colors_index, filename, save=st.session_state.save_image)
             st.image(image_index)
 

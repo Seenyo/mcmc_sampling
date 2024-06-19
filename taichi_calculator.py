@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 @ti.data_oriented
 class MetropolisHastings:
-    def __init__(self, num_of_particles, a, b, c, s, proposal_std, num_of_independent_trials,
+    def __init__(self, num_of_particles, a, b, c, s, proposal_std, num_of_chains,
                  target_distribution_name='target_distribution', acceptance_ratio_calculation_with_log=False,
                  record_from_first_acceptance=False, use_metropolis_within_gibbs=False):
         self.a = a
@@ -19,12 +19,12 @@ class MetropolisHastings:
         self.c = c
         self.s = s
         self.proposal_std = proposal_std
-        self.num_of_independent_trials = num_of_independent_trials
+        self.num_of_chains = num_of_chains
         self.num_of_particles = num_of_particles
 
-        self.init_particles = ti.Vector.field(2, dtype=ti.f32, shape=(num_of_independent_trials, num_of_particles))
-        self.proposed_particles = ti.Vector.field(2, dtype=ti.f32, shape=(num_of_independent_trials, num_of_particles))
-        self.current_particles = ti.Vector.field(2, dtype=ti.f32, shape=(num_of_independent_trials, num_of_particles))
+        self.init_particles = ti.Vector.field(2, dtype=ti.f32, shape=(num_of_chains, num_of_particles))
+        self.proposed_particles = ti.Vector.field(2, dtype=ti.f32, shape=(num_of_chains, num_of_particles))
+        self.current_particles = ti.Vector.field(2, dtype=ti.f32, shape=(num_of_chains, num_of_particles))
 
         self.target_distribution_name = target_distribution_name
 
@@ -33,10 +33,10 @@ class MetropolisHastings:
 
         # 最初のacceptanceが起こった時点から記録を行うかどうか
         self.record_from_first_acceptance = record_from_first_acceptance
-        self.count_of_acceptance = ti.field(dtype=ti.i32, shape=num_of_independent_trials)
+        self.count_of_acceptance = ti.field(dtype=ti.i32, shape=num_of_chains)
 
         # 前のステップの確率密度関数の値を保存する変数
-        self.current_prob = ti.field(dtype=ti.f32, shape=num_of_independent_trials)
+        self.current_prob = ti.field(dtype=ti.f32, shape=num_of_chains)
 
         # Metropolis-within-Gibbsを使うかどうか
         self.use_metropolis_within_gibbs = use_metropolis_within_gibbs
@@ -44,7 +44,7 @@ class MetropolisHastings:
     @ti.kernel
     def initialize_all_chain_particles(self):
         # Initialize the particles with the same initial values
-        for chain_idx in range(self.num_of_independent_trials):
+        for chain_idx in range(self.num_of_chains):
             for particle_idx in range(self.num_of_particles):
                 self.init_particles[chain_idx, particle_idx] = ti.Vector(
                     [ti.random(dtype=ti.f32), ti.random(dtype=ti.f32)])
@@ -299,10 +299,12 @@ class MetropolisHastings:
                 x1 = self.proposed_particles[chain_idx, k] if is_proposed else self.current_particles[chain_idx, k]
                 x2 = self.proposed_particles[chain_idx, l] if is_proposed else self.current_particles[chain_idx, l]
                 r = self.toroidal_distance(1.0, x1, x2)
+                print(f'r({k}, {l}): {r} x1:({x1[0]}, {x1[1]}), x2:({x2[0]}, {x2[1]})', end=' ')
                 kappa2 = -1.0 if r < self.b else c * ti.exp(-(r - self.b)) * (-ti.cos(self.a * (r - self.b)) + Cab)
                 second_order_term *= (1.0 + kappa2)
 
         val = first_order_term * second_order_term
+        print(f'val: {val}')
 
         if val < -1e-5:
             print(f'val is a negative value: {val}')
@@ -416,14 +418,15 @@ class MetropolisHastings:
 
     @ti.func
     def calculate_acceptance_direct(self, prob_current, prob_proposed):
+        acceptance_ratio = 0.0
         # Avoid division by zero
         if prob_proposed == 0.0 and prob_current == 0.0:
             acceptance_ratio = 0.0
         elif prob_proposed > 0.0 and prob_current == 0.0:
             acceptance_ratio = 1.0
+        else:
+            acceptance_ratio = prob_proposed / prob_current
 
-        # Calculate the acceptance ratio
-        acceptance_ratio = prob_proposed / prob_current
         return acceptance_ratio
 
     @ti.func
@@ -443,25 +446,34 @@ class MetropolisHastings:
         return acceptance_ratio
 
     @ti.func
-    def sample_all_particles_from_proposal_distribution(self, independent_chain_idx):
+    def sample_all_particles_from_proposal_distribution(self, chain_idx):
         for i in range(self.num_of_particles):
             val_x = (ti.random(dtype=ti.f32) - 0.5) * self.proposal_std
             val_y = (ti.random(dtype=ti.f32) - 0.5) * self.proposal_std
 
-            self.proposed_particles[independent_chain_idx, i][0] = (self.current_particles[independent_chain_idx, i][
+            self.proposed_particles[chain_idx, i][0] = (self.current_particles[chain_idx, i][
                                                                         0] + val_x) % 1.0
-            self.proposed_particles[independent_chain_idx, i][1] = (self.current_particles[independent_chain_idx, i][
+            self.proposed_particles[chain_idx, i][1] = (self.current_particles[chain_idx, i][
                                                                         1] + val_y) % 1.0
 
     @ti.func
-    def sample_single_particle_from_proposal_distribution(self, independent_chain_idx, sample_particle_idx):
+    def sample_single_particle_from_proposal_distribution(self, chain_idx, particle_idx):
         val_x = (ti.random(dtype=ti.f32) - 0.5) * self.proposal_std
         val_y = (ti.random(dtype=ti.f32) - 0.5) * self.proposal_std
 
-        self.proposed_particles[independent_chain_idx, sample_particle_idx][0] = (
-                (self.current_particles[independent_chain_idx, sample_particle_idx][0] + val_x) % 1.0)
-        self.proposed_particles[independent_chain_idx, sample_particle_idx][1] = (
-                (self.current_particles[independent_chain_idx, sample_particle_idx][1] + val_y) % 1.0)
+        x = (self.current_particles[chain_idx, particle_idx][0] + val_x) % 1.0
+        y = (self.current_particles[chain_idx, particle_idx][1] + val_y) % 1.0
+
+        self.proposed_particles[chain_idx, particle_idx] = ti.Vector([x, y])
+
+        cx1 = self.current_particles[chain_idx, 0]
+        cx2 = self.current_particles[chain_idx, 1]
+
+        px1 = self.proposed_particles[chain_idx, 0]
+        px2 = self.proposed_particles[chain_idx, 1]
+        print(f'x, y: {x}, {y}')
+        print(f'Current particle at chain_idx: {chain_idx}, particle_idx: {particle_idx}, x1:({cx1[0]}, {cx1[1]}), x2:({cx2[0]}, {cx2[1]})')
+        print(f'Sampled particle at chain_idx: {chain_idx}, particle_idx: {particle_idx}, x1:({px1[0]}, {px1[1]}), x2:({px2[0]}, {px2[1]})')
 
     @ti.func
     def calculate_probability(self, chain_idx, is_proposed=False):
@@ -529,12 +541,12 @@ class MetropolisHastings:
 
     @ti.kernel
     def calculate_initial_probability(self):
-        for chain_idx in range(self.num_of_independent_trials):
-            self.current_prob[chain_idx] = self.calculate_probability(chain_idx)
+        for chain_idx in range(self.num_of_chains):
+            self.current_prob[chain_idx] = self.calculate_probability(chain_idx, False)
 
     @ti.kernel
     def initialize_count_of_acceptance(self):
-        for i in range(self.num_of_independent_trials):
+        for i in range(self.num_of_chains):
             self.count_of_acceptance[i] = 0
 
     def compute_mcmc(self):
@@ -545,7 +557,7 @@ class MetropolisHastings:
 
     @ti.kernel
     def compute_mh(self):
-        for chain_idx in range(self.num_of_independent_trials):
+        for chain_idx in range(self.num_of_chains):
             self.sample_all_particles_from_proposal_distribution(chain_idx)
             proposed_prob = self.calculate_probability(chain_idx, True)
             acceptance_ratio = self.calculate_acceptance_ratio(chain_idx, proposed_prob)
@@ -560,19 +572,31 @@ class MetropolisHastings:
     # Metropolis within Gibbs
     @ti.kernel
     def compute_mwg(self):
-        for chain_idx in range(self.num_of_independent_trials):
+        for chain_idx in range(self.num_of_chains):
             # Gibbs sampling
             for particle_idx in range(self.num_of_particles):
+                print('particle_idx: ', particle_idx)
                 self.sample_single_particle_from_proposal_distribution(chain_idx, particle_idx)
                 proposed_prob = self.calculate_probability(chain_idx, True)
                 acceptance_ratio = self.calculate_acceptance_ratio(chain_idx, proposed_prob)
+
+                cx1 = self.current_particles[chain_idx, 0]
+                cx2 = self.current_particles[chain_idx, 1]
+
+                px1 = self.proposed_particles[chain_idx, 0]
+                px2 = self.proposed_particles[chain_idx, 1]
+
+                print(f'chain_idx: {chain_idx}, particle_idx: {particle_idx}, current_particles: x1({cx1}), x2({cx2}), current_prob: {self.current_prob[chain_idx]}')
+                print(f'chain_idx: {chain_idx}, particle_idx: {particle_idx}, proposed_particles: x1({px1}, x2({px2}, proposed_prob: {proposed_prob}')
 
                 if acceptance_ratio >= 1.0 or ti.random(dtype=ti.f32) < acceptance_ratio:
                     self.current_particles[chain_idx, particle_idx] = self.proposed_particles[chain_idx, particle_idx]
                     self.current_prob[chain_idx] = proposed_prob
                     self.count_of_acceptance[chain_idx] += 1
-                else:
-                    self.proposed_particles[chain_idx, particle_idx] = self.current_particles[chain_idx, particle_idx]
+
+                    cx1 = self.current_particles[chain_idx, 0]
+                    cx2 = self.current_particles[chain_idx, 1]
+                    print(f'Accepted at chain_idx: {chain_idx}, particle_idx: {particle_idx}, current_particles: x1({cx1}), x2({cx2}), current_prob: {self.current_prob[chain_idx]}')
 
     @ti.func
     def isnan(self, x):
@@ -603,28 +627,47 @@ def initialize_particles(mh, verbose=True):
 
     mh.initialize_count_of_acceptance()
 
+def target_distribution5_log(chain_idx, a, b, num_of_particles, current_particles):
+    a_squared_plus_one = a ** 2 + 1
+    b_plus_one = b + 1
+    b_minus_one = b - 1
+
+    c_numer = (a_squared_plus_one ** 2) * (b ** 2 + 2 * b + 2)
+    c_denom = 2 * ((a_squared_plus_one ** 2) * b_plus_one - a_squared_plus_one * b_minus_one - 2)
+    c = c_numer / c_denom
+    Cab_1 = b_minus_one / (a_squared_plus_one * b_plus_one)
+    Cab_2 = 2 / (a_squared_plus_one ** 2 * b_plus_one)
+    Cab_3 = b ** 2 / (2 * b_plus_one * c)
+    Cab = Cab_1 + Cab_2 + Cab_3
+
+    area = 1.0
+    first_order_term = 0.0
+    for i in range(num_of_particles):
+        first_order_term += ti.log(1.0 / area)
+
+    # calculate second_order_term
+    second_order_term = 0.0
+    for k in range(num_of_particles):
+        for l in range(k + 1, num_of_particles):
+            x1 = current_particles[chain_idx, k]
+            x2 = current_particles[chain_idx, l]
+            r = toroidal_distance(1.0, x1, x2)
+            kappa2 = -1.0 if r < b else c * ti.exp(-(r - b)) * (-ti.cos(a * (r - b)) + Cab)
+            second_order_term += ti.log(1.0 + kappa2)
+
+    log_val = first_order_term + second_order_term
+
+    return log_val
+
 
 def perform_calculations(args):
-    MH = MetropolisHastings(
-        args.num_of_particles,
-        args.a,
-        args.b,
-        args.c,
-        args.s,
-        args.proposal_std,
-        args.num_of_independent_trials,
-        args.target_distribution_name,
-        args.acceptance_ratio_calculation_with_log,
-        args.record_from_first_acceptance,
-        args.use_metropolis_within_gibbs
-    )
     print(f'acceptance_ratio_calculation_with_log: {args.acceptance_ratio_calculation_with_log}')
     print(f'record_from_first_acceptance: {args.record_from_first_acceptance}')
 
-    # burn-inの試行数を設定
-    burn_in_trials = int(args.num_of_independent_trials * args.burn_in_multiplier)
+    # burn-inの試行数を設定（num_of_chainsの1.1倍）
+    burn_in_chains = int(args.num_of_chains * args.burn_in_multiplier)
 
-    print(f'burn_in_trials: {burn_in_trials}')
+    print(f'burn_in_chains: {burn_in_chains}')
 
     # burn-in用のMetropolisHastingsインスタンスを作成
     MH_burn_in = MetropolisHastings(
@@ -634,14 +677,13 @@ def perform_calculations(args):
         args.c,
         args.s,
         args.proposal_std,
-        burn_in_trials,
+        burn_in_chains,
         args.target_distribution_name,
         args.acceptance_ratio_calculation_with_log,
         args.record_from_first_acceptance,
         args.use_metropolis_within_gibbs
     )
     initialize_particles(MH_burn_in)
-    MH_burn_in.initialize_count_of_acceptance()
 
     # burn-inを実行
     count = 0
@@ -649,11 +691,15 @@ def perform_calculations(args):
     accepted_particles = []
     accepted_probs = []
 
-    while num_accepted < args.num_of_independent_trials:
+    print('Burn-in started')
+
+    while num_accepted < args.num_of_chains:
+        print(f'mutating at count: {count}')
         MH_burn_in.compute_mcmc()
         count += 1
 
-        if count % args.num_of_sampling_strides == 0:
+        # num_of_mutationsごとにチェック
+        if count % args.num_of_mutations == 0:
             new_accepted_indices = np.where(MH_burn_in.count_of_acceptance.to_numpy() > 0)[0]
 
             if new_accepted_indices.size > 0:
@@ -663,10 +709,10 @@ def perform_calculations(args):
 
                 # 受理されたサンプルの数を更新
                 num_accepted = len(accepted_particles)
-                print(f'num_accepted: {num_accepted} / {args.num_of_independent_trials} at count: {count}')
+                print(f'num_accepted: {num_accepted} / {args.num_of_chains} at count: {count}')
 
-                # 一度受理されたサンプルがargs.num_of_independent_trialsに達した場合
-                if num_accepted >= args.num_of_independent_trials:
+                # 一度受理されたサンプルがargs.num_of_chainsに達した場合
+                if num_accepted >= args.num_of_chains:
                     break
 
             # 受理されないチェーンの粒子を再初期化
@@ -675,23 +721,29 @@ def perform_calculations(args):
     print(f'Burn-in finished at count: {count}')
 
     # burn-inが終了したら、受理された粒子の位置をMHにコピー
-    accepted_particles_array = np.array(accepted_particles[:args.num_of_independent_trials])
-    accepted_probs_array = np.array(accepted_probs[:args.num_of_independent_trials])
+    accepted_particles_array = np.array(accepted_particles[:args.num_of_chains])
+    accepted_probs_array = np.array(accepted_probs[:args.num_of_chains])
 
-    # print(f'accepted_particles_array.shape: {accepted_particles_array.shape}')
-    # print(f'accepted_probs_array: {accepted_probs_array}')
+    print(f'accepted_probs_array: {accepted_probs_array}')
 
+    MH = MH_burn_in
     MH.current_particles.from_numpy(accepted_particles_array)
     MH.current_prob.from_numpy(accepted_probs_array)
+
+    MH.calculate_initial_probability()
+    print(f'Current particles: {MH.current_particles.to_numpy()}')
+    print(f'Calculating initial probability (10 chains from top): {MH.current_prob.to_numpy()}')
+
+    return None
 
     # Perform calculations
     taichi_start = time.time()
     result_particles = []
     prev_acceptance_rate = None
 
-    for chain_idx in tqdm(range(args.num_of_iterations_for_each_trial)):
+    for chain_idx in tqdm(range(args.num_of_iterations_for_each_chain)):
         MH.compute_mcmc()
-        if chain_idx % args.num_of_sampling_strides == 0 and chain_idx != 0:
+        if chain_idx % args.num_of_mutations == 0 and chain_idx != 0:
             result_particles.append(MH.current_particles.to_numpy())
 
             # Calculate acceptance rate
@@ -715,10 +767,10 @@ def perform_calculations(args):
     if args.use_metropolis_within_gibbs:
         average_acceptance_ratio = (
                 (MH.count_of_acceptance.to_numpy().mean() / (
-                        args.num_of_particles * args.num_of_iterations_for_each_trial)) * 100)
+                        args.num_of_particles * args.num_of_iterations_for_each_chain)) * 100)
     else:
         average_acceptance_ratio = (
-                (MH.count_of_acceptance.to_numpy().mean() / args.num_of_iterations_for_each_trial) * 100)
+                (MH.count_of_acceptance.to_numpy().mean() / args.num_of_iterations_for_each_chain) * 100)
 
     print(f'Average acceptance ratio: {average_acceptance_ratio}%')
 
@@ -771,10 +823,10 @@ if __name__ == "__main__":
     parser.add_argument('--s', type=float, default=0.1)
     parser.add_argument('--burn_in_multiplier', type=float, default=1.5)
     parser.add_argument('--proposal_std', type=float, default=1.0)
-    parser.add_argument('--num_of_independent_trials', type=int, default=10000)
+    parser.add_argument('--num_of_chains', type=int, default=10000)
     parser.add_argument('--target_distribution_name', type=str, default='target_distribution')
-    parser.add_argument('--num_of_iterations_for_each_trial', type=int, default=10000)
-    parser.add_argument('--num_of_sampling_strides', type=int, default=1000)
+    parser.add_argument('--num_of_iterations_for_each_chain', type=int, default=10000)
+    parser.add_argument('--num_of_mutations', type=int, default=1000)
     parser.add_argument('--acceptance_ratio_calculation_with_log', action='store_true', default=False)
     parser.add_argument('--record_from_first_acceptance', action='store_true', default=False)
     parser.add_argument('--use_metropolis_within_gibbs', action='store_true', default=False)

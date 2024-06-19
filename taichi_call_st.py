@@ -35,9 +35,9 @@ def initialize_parameters():
     st.session_state.s = st.sidebar.number_input("s", 0.0, 5.0, 0.1)
     st.session_state.proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 5.0, 0.5)
     st.session_state.r_threshold = st.sidebar.number_input("r Threshold", 0.0, 1.0, 0.001)
-    st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 1000000, 10000)
-    st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 100000000, 10000)
-    st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 10000000, 1000)
+    st.session_state.num_of_chains = st.sidebar.number_input("Number of Chains", 1, 1000000, 10000)
+    st.session_state.num_of_iterations_for_each_chain = st.sidebar.number_input("Number of Iterations for Each Chain", 1, 100000000, 10000)
+    st.session_state.num_of_mutations = st.sidebar.number_input("Number of Mutations", 10, 10000000, 1000)
     st.session_state.scaling_factor = st.sidebar.number_input("Scaling Factor", 0.0, 100.0, 5.0, step=0.5)
     st.session_state.geta = st.sidebar.number_input("Geta", 0.0, 30.0, 5.0, step=0.5)
     st.session_state.burn_in_multiplier = st.sidebar.number_input("Burn-in Multiplier", 1.0, 10.0, 1.5, step=0.1)
@@ -116,17 +116,18 @@ def load_data():
                 st.session_state[var_name] = cast_func(f.read())
 
 def visualize_particles_with_plotly():
-
     # st.session_state.current_particlesの最後の要素を取得
     last_particles = st.session_state.current_particles[-1]
     st.info(f'Number of Particles: {len(last_particles)}')
     st.info(last_particles)
 
+    titleStr = "Metropolis within Gibbs Sampling with Particles" if st.session_state.use_metropolis_within_gibbs else "Metropolis-Hastings Algorithm Sampling with Particles"
+
     # last_particlesをplotlyで描画, 正方形の範囲, スケーリングを指定
     fig = go.Figure()
     for i in range(len(last_particles)):
         fig.add_trace(go.Scatter(x=[last_particles[i][0]], y=[last_particles[i][1]], mode='markers', name=f'Particle {i}'))
-    fig.update_layout(title='Metropolis-Hastings Algorithm Sampling with Particles',
+    fig.update_layout(title=titleStr,
                       xaxis_title='x',
                       yaxis_title='y',
                       xaxis_range=[0, 1],
@@ -264,8 +265,8 @@ def calculate_min_distance(result_particles):
 def add_annotation_to_plot(fig):
     MinDistStr = f'Minimum Distance: {st.session_state.min_distance:.4e}'
     NumOfParticlesStr = f'Number of Particles: {st.session_state.num_of_particles}'
-    IterationsPerTrialStr = f'Iterations per Trial: {st.session_state.num_of_iterations_for_each_trial}'
-    SamplingStridesStr = f'Sampling Strides: {st.session_state.num_of_sampling_strides}'
+    IterationsPerTrialStr = f'Iterations per Trial: {st.session_state.num_of_iterations_for_each_chain}'
+    SamplingStridesStr = f'Sampling Strides: {st.session_state.num_of_mutations}'
     AverageAcceptanceRatioStr = f'Average Acceptance Ratio: {st.session_state.average_acceptance_ratio:.2f}%'
 
     if st.session_state.use_metropolis_within_gibbs:
@@ -281,6 +282,7 @@ def add_annotation_to_plot(fig):
         xref='paper',
         yref='paper'
     )
+
 def visualize_min_distance_particles():
     if st.session_state.result_particles is not None:
         st.session_state.distances, st.session_state.min_distance, st.session_state.min_distance_particles, st.session_state.min_distance_pair = calculate_min_distance(st.session_state.result_particles)
@@ -318,6 +320,25 @@ def visualize_min_distance_particles():
             margin=dict(r=60)
         )
 
+        MinDistStr = f'Minimum Distance: {st.session_state.min_distance:.4e}'
+        NumOfParticlesStr = f'Number of Particles: {st.session_state.num_of_particles}'
+        IterationsPerTrialStr = f'Iterations per Trial: {st.session_state.num_of_iterations_for_each_chain}'
+        SamplingStridesStr = f'Mutations: {st.session_state.num_of_mutations}'
+        AverageAcceptanceRatioStr = f'Average Acceptance Ratio: {st.session_state.average_acceptance_ratio:.2f}%'
+
+        if st.session_state.use_metropolis_within_gibbs:
+            methodStr = 'Method: Metropolis within Gibbs'
+        else:
+            methodStr = 'Method: Metropolis-Hastings'
+
+        fig.add_annotation(
+            x=1.05,
+            y=1.0,
+            showarrow=False,
+            text=f'{MinDistStr}<br>{NumOfParticlesStr}<br>{IterationsPerTrialStr}<br>{SamplingStridesStr}<br>{AverageAcceptanceRatioStr}<br>{methodStr}',
+            xref='paper',
+            yref='paper'
+        )
         add_annotation_to_plot(fig)
 
         st.plotly_chart(fig, theme=None)
@@ -378,7 +399,7 @@ def visualize_particles():
         for i in range(st.session_state.num_of_particles):
             data_index = np.array([chain[i] for chain in st.session_state.current_particles])
             colors_index = colors_all[i::st.session_state.num_of_particles]
-            filename = f'particles_index_{i}_trial_count_{st.session_state.num_of_independent_trials}_mh_steps_{st.session_state.num_of_iterations_for_each_trial}'
+            filename = f'particles_index_{i}_trial_count_{st.session_state.num_of_chains}_mh_steps_{st.session_state.num_of_iterations_for_each_chain}'
             image_index = draw_particles(data_index, colors_index, filename, save=st.session_state.save_image)
             st.image(image_index)
 
@@ -414,7 +435,7 @@ def set_flags():
     use_metropolis_within_gibbs_flag = "--use_metropolis_within_gibbs" if st.session_state.use_metropolis_within_gibbs else ""
     return log_flag, record_flag, use_metropolis_within_gibbs_flag
 def main():
-    st.title('Metropolis-Hastings Algorithm Sampling')
+    st.title('Markov chain Monte Carlo Algorithm Sampling')
     initialize_parameters()
 
     if st.session_state.use_maximal_c:
@@ -431,10 +452,10 @@ def main():
             f"--c {st.session_state.c} "
             f"--s {st.session_state.s} "
             f"--proposal_std {st.session_state.proposal_std} "
-            f"--num_of_independent_trials {st.session_state.num_of_independent_trials} "
+            f"--num_of_chains {st.session_state.num_of_chains} "
             f"--target_distribution_name {st.session_state.target_distribution_name} "
-            f"--num_of_iterations_for_each_trial {st.session_state.num_of_iterations_for_each_trial} "
-            f"--num_of_sampling_strides {st.session_state.num_of_sampling_strides} "
+            f"--num_of_iterations_for_each_chain {st.session_state.num_of_iterations_for_each_chain} "
+            f"--num_of_mutations {st.session_state.num_of_mutations} "
             f"--burn_in_multiplier {st.session_state.burn_in_multiplier} "
             f"{log_flag} "
             f"{record_flag} "
@@ -443,13 +464,13 @@ def main():
         )
         load_data()
         st.info(f"Calculation Time: {st.session_state.calc_time:.2f} sec")
-        st.info(f"Average Acceptance Ratio: {st.session_state.average_acceptance_ratio:.3f}%")
+        st.info(f"Average Acceptance Ratio: {st.session_state.average_acceptance_ratio:.2f}%")
 
     if st.session_state.current_particles is not None and st.session_state.plotly:
         visualize_particles_with_plotly()
 
     if st.session_state.result_particles is not None:
-        st.info(f'Sampled a total of {len(st.session_state.result_particles)} times in each independent trial.')
+        st.info(f'Sampled a total of {len(st.session_state.result_particles)} times per chain.')
         visualize_min_distance_particles()
         visualize_acceptance_rate()
         visualize_acceptance_rate_change()
