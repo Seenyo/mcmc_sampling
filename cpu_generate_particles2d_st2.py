@@ -174,9 +174,9 @@ def initialize_parameters():
     st.session_state.s = st.sidebar.number_input("s", 0.0, 1.0, 0.1)
     st.session_state.proposal_std = st.sidebar.number_input("Proposal Standard Deviation", 0.0, 5.0, 1.0)
     st.session_state.r_threshold = st.sidebar.number_input("r Threshold", 0.0, 1.0, 0.001)
-    st.session_state.num_of_independent_trials = st.sidebar.number_input("Number of Independent Trials", 1, 10000000, 10000)
-    st.session_state.num_of_iterations_for_each_trial = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 10000000, 10000)
-    st.session_state.num_of_sampling_strides = st.sidebar.number_input("Number of Sampling Strides", 100, 10000, 1000)
+    st.session_state.num_of_chains = st.sidebar.number_input("Number of Independent Trials", 1, 10000000, 10000)
+    st.session_state.num_of_iterations_for_each_chain = st.sidebar.number_input("Number of Iterations for Each Trial", 1, 10000000, 10000)
+    st.session_state.num_of_mutations = st.sidebar.number_input("Number of Sampling Strides", 100, 10000, 1000)
     st.session_state.scaling_factor = st.sidebar.slider("Scaling Factor", 0.0, 100.0, 50.0)
     st.session_state.geta = st.sidebar.slider("Geta", 0.0, 10.0, 5.0)
     st.session_state.show_particles = st.sidebar.checkbox("Visualize Particles", False)
@@ -276,7 +276,7 @@ def visualize_min_distance_particles():
         x=1.05,
         y=1.0,
         showarrow=False,
-        text=f'Minimum Distance: {st.session_state.min_distance:.4e}<br>Number of Particles: {st.session_state.num_of_particles}<br>Iterations per Trial: {st.session_state.num_of_iterations_for_each_trial}<br>Sampling Strides: {st.session_state.num_of_sampling_strides}',
+        text=f'Minimum Distance: {st.session_state.min_distance:.4e}<br>Number of Particles: {st.session_state.num_of_particles}<br>Iterations per Trial: {st.session_state.num_of_iterations_for_each_chain}<br>Sampling Strides: {st.session_state.num_of_mutations}',
         xref='paper',
         yref='paper'
     )
@@ -296,7 +296,7 @@ def perform_calculations():
         st.session_state.c,
         st.session_state.s,
         st.session_state.proposal_std,
-        st.session_state.num_of_independent_trials,
+        st.session_state.num_of_chains,
         st.session_state.target_distribution_name
     )
     MH.initialize_particles()
@@ -309,16 +309,16 @@ def perform_calculations():
         rgb = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
         st.session_state.colors[i] = rgb + (1.0,)
 
-    save_intervals = generate_intervals(st.session_state.num_of_iterations_for_each_trial)
+    save_intervals = generate_intervals(st.session_state.num_of_iterations_for_each_chain)
 
     st.session_state.distances = []
     gif_images = []
     # Perform calculations
     taichi_start = time.time()
     st.session_state.result_particles = []
-    for trial_idx in stqdm(range(st.session_state.num_of_iterations_for_each_trial + 1)):
+    for trial_idx in stqdm(range(st.session_state.num_of_iterations_for_each_chain + 1)):
         MH.compute_mh()
-        if trial_idx % st.session_state.num_of_sampling_strides == 0 and trial_idx != 0:
+        if trial_idx % st.session_state.num_of_mutations == 0 and trial_idx != 0:
             st.session_state.result_particles.append(MH.current_particles.to_numpy())
             # calculate the distance between two particles
             troi_dist = toroidal_distance(1.0, MH.current_particles[0, 0], MH.current_particles[0, 1])
@@ -448,7 +448,7 @@ def visualize_particles():
         for i in range(st.session_state.num_of_particles):
             data_index = np.array([chain[i] for chain in st.session_state.current_particles])
             colors_index = colors_all[i::st.session_state.num_of_particles]
-            filename = f'particles_index_{i}_trial_count_{st.session_state.num_of_independent_trials}_mh_steps_{st.session_state.num_of_iterations_for_each_trial}'
+            filename = f'particles_index_{i}_trial_count_{st.session_state.num_of_chains}_mh_steps_{st.session_state.num_of_iterations_for_each_chain}'
             image_index = draw_particles(data_index, colors_index, filename, save=st.session_state.save_image)
             st.image(image_index)
 
