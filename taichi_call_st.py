@@ -1,13 +1,17 @@
+import json
 import os
 import streamlit as st
 import numpy as np
 import plotly.graph_objects as go
+import plotly.io as pio
 from vispy import scene
 from vispy.io import write_png
 import subprocess
 import datetime
 import colorsys
 import math
+
+from stqdm import stqdm
 
 # 仮想環境のアクティベーションコマンド
 if os.name == 'nt':  # Windowsの場合
@@ -181,16 +185,16 @@ def visualize_histogram():
     if st.session_state.distances is not None:
         # Display the histogram with go
         # Display as a density plot
-        fig = go.Figure(data=[go.Histogram(x=st.session_state.distances, histnorm='density', nbinsx=50)])
-        fig.update_layout(title='Distance between Two Particles', xaxis_title='Distance', yaxis_title='Density')
-        fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
-        st.plotly_chart(fig, theme=None)
-
-        # Normalize the histogram as a density plot
-        hist, bin_edges = np.histogram(st.session_state.distances, bins=50, density=True)
-        bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
-
-        normalized_hist = hist / bin_centers
+        # fig = go.Figure(data=[go.Histogram(x=st.session_state.distances, histnorm='density', nbinsx=50)])
+        # fig.update_layout(title='Distance between Two Particles', xaxis_title='Distance', yaxis_title='Density')
+        # fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
+        # st.plotly_chart(fig, theme=None)
+        #
+        # # Normalize the histogram as a density plot
+        # hist, bin_edges = np.histogram(st.session_state.distances, bins=50, density=True)
+        # bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+        #
+        # normalized_hist = hist / bin_centers
 
         # calculate kappa value
         sin_ab = np.sin(st.session_state.a * st.session_state.b)
@@ -239,12 +243,12 @@ def visualize_histogram():
             st.session_state.prev_scaling_factor = st.session_state.scaling_factor
             st.session_state.prev_geta = st.session_state.geta
 
-        fig = go.Figure(data=[go.Bar(x=bin_centers, y=normalized_hist)])
-        fig.add_trace(go.Scatter(x=r_list, y=st.session_state.kappa_values, mode='lines', name='Kappa Values'))
-        fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
-        fig.update_yaxes(range=[0, max(normalized_hist) * 1.1])
-        fig.update_layout(title='Normalized Distance between Two Particles', xaxis_title='Distance', yaxis_title='Normalized Frequency')
-        st.plotly_chart(fig, theme=None)
+        # fig = go.Figure(data=[go.Bar(x=bin_centers, y=normalized_hist)])
+        # fig.add_trace(go.Scatter(x=r_list, y=st.session_state.kappa_values, mode='lines', name='Kappa Values'))
+        # fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
+        # fig.update_yaxes(range=[0, max(normalized_hist) * 1.1])
+        # fig.update_layout(title='Normalized Distance between Two Particles', xaxis_title='Distance', yaxis_title='Normalized Frequency')
+        # st.plotly_chart(fig, theme=None)
 
 @st.cache_data
 def calculate_min_distance(result_particles):
@@ -407,41 +411,190 @@ def visualize_particles():
 
 def visualize_acceptance_rate():
     if os.path.exists('temp_folder/acceptance_rate.txt'):
+        global acceptance_rates
         acceptance_rates = []
         with open('temp_folder/acceptance_rate.txt', 'r') as f:
             for line in f:
                 acceptance_rates.append(float(line.strip()))
 
-        fig = go.Figure(data=go.Scatter(y=acceptance_rates))
-        fig.update_layout(title='Acceptance Rate over Iterations',
-                          xaxis_title='Iteration',
-                          yaxis_title='Acceptance Rate (%)')
-        st.plotly_chart(fig, theme=None)
+        # mutations = list(range(1, len(acceptance_rates) + 1))
+        # mutations = [x * st.session_state.num_of_mutations for x in mutations]
+
+        # fig = go.Figure(data=go.Scatter(x=mutations, y=acceptance_rates))
+        # fig.update_layout(title='Acceptance Rate over Mutations',
+        #                   xaxis_title='Mutations',
+        #                   yaxis_title='Acceptance Rate (%)')
+        # st.plotly_chart(fig, theme=None)
+
 
 def visualize_acceptance_rate_change():
     if os.path.exists('temp_folder/acceptance_rate_change.txt'):
+        global acceptance_rate_changes
         acceptance_rate_changes = []
         with open('temp_folder/acceptance_rate_change.txt', 'r') as f:
             for line in f:
                 acceptance_rate_changes.append(float(line.strip()))
 
-        fig = go.Figure(data=go.Scatter(y=acceptance_rate_changes))
-        fig.update_layout(title='Relative Change of Acceptance Rate over Iterations',
-                          xaxis_title='Iteration',
-                          yaxis_title='Relative Change (%)')
-        st.plotly_chart(fig, theme=None)
+        # mutations = list(range(2, len(acceptance_rate_changes) + 2))
+        # mutations = [x * st.session_state.num_of_mutations for x in mutations]
+
+        # fig = go.Figure(data=go.Scatter(x=mutations, y=acceptance_rate_changes))
+        # fig.update_layout(title='Relative Change of Acceptance Rate over Mutations',
+        #                   xaxis_title='Mutations',
+        #                   yaxis_title='Relative Change of Acceptance Rate (%)')
+        # st.plotly_chart(fig, theme=None)
 
 def set_flags():
     log_flag = "--acceptance_ratio_calculation_with_log" if st.session_state.acceptance_ratio_calculation_with_log else ""
     record_flag = "--record_from_first_acceptance" if st.session_state.record_from_first_acceptance else ""
     use_metropolis_within_gibbs_flag = "--use_metropolis_within_gibbs" if st.session_state.use_metropolis_within_gibbs else ""
     return log_flag, record_flag, use_metropolis_within_gibbs_flag
+def calculate_all_patterns():
+    num_of_particles_list = [2, 5, 10, 15, 20, 30]
+    num_of_mutations_list = [100, 1000, 10000, 100000]
+    use_metropolis_within_gibbs_list = [True]
+    use_log_calculation_list = [True, False]
+
+    total_iterations = len(use_log_calculation_list) * len(use_metropolis_within_gibbs_list) * len(num_of_particles_list) * len(num_of_mutations_list)
+
+    with stqdm(total=total_iterations, desc="Progress") as pbar:
+        for use_log_calculation in use_log_calculation_list:
+            for use_metropolis_within_gibbs in use_metropolis_within_gibbs_list:
+                for num_of_particles in num_of_particles_list:
+                    for num_of_mutations in num_of_mutations_list:
+                        st.session_state.num_of_particles = num_of_particles
+                        st.session_state.num_of_mutations = num_of_mutations
+                        st.session_state.num_of_iterations_for_each_chain = num_of_mutations * 10
+                        st.session_state.use_metropolis_within_gibbs = use_metropolis_within_gibbs
+                        st.session_state.acceptance_ratio_calculation_with_log = use_log_calculation
+
+                        log_flag, record_flag, use_metropolis_within_gibbs_flag = set_flags()
+                        subprocess.run(
+                            f"{venv_activate} && python taichi_calculator.py "
+                            f"--num_of_particles {st.session_state.num_of_particles} "
+                            f"--a {st.session_state.a} "
+                            f"--b {st.session_state.b} "
+                            f"--c {st.session_state.c} "
+                            f"--s {st.session_state.s} "
+                            f"--proposal_std {st.session_state.proposal_std} "
+                            f"--num_of_chains {st.session_state.num_of_chains} "
+                            f"--target_distribution_name {st.session_state.target_distribution_name} "
+                            f"--num_of_iterations_for_each_chain {st.session_state.num_of_iterations_for_each_chain} "
+                            f"--num_of_mutations {st.session_state.num_of_mutations} "
+                            f"--burn_in_multiplier {st.session_state.burn_in_multiplier} "
+                            f"{log_flag} "
+                            f"{record_flag} "
+                            f"{use_metropolis_within_gibbs_flag}",
+                            shell=True
+                        )
+                        load_data()
+                        method = "MWG" if use_metropolis_within_gibbs else "MH"
+                        log_calculation = "Log" if use_log_calculation else "Normal"
+                        save_dir = f"patern_results/{st.session_state.target_distribution_name}/{method}_{log_calculation}/{num_of_particles}_{num_of_mutations}"
+                        visualize_acceptance_rate()
+                        visualize_acceptance_rate_change()
+                        visualize_histogram()
+                        save_results(save_dir)
+                        pbar.update(1)
+
+def save_results(save_dir):
+    if not os.path.exists(save_dir):
+        os.makedirs(f"{save_dir}/img")
+        os.makedirs(f"{save_dir}/data")
+
+    # 画像を保存
+    # Minimum Distance between Particlesの画像を保存
+    fig_min_distance = go.Figure(data=[go.Scatter(x=[x[0] for x in st.session_state.min_distance_particles], y=[x[1] for x in st.session_state.min_distance_particles], mode='markers', marker=dict(color='black'), showlegend=False)])
+
+    # 最小距離のペアの粒子を赤と緑でプロット
+    x0, y0 = st.session_state.min_distance_particles[st.session_state.min_distance_pair[0]]
+    x1, y1 = st.session_state.min_distance_particles[st.session_state.min_distance_pair[1]]
+
+    fig_min_distance.add_trace(go.Scatter(x=[x0], y=[y0], mode='markers', marker=dict(color='red'), showlegend=False))
+    fig_min_distance.add_trace(go.Scatter(x=[x1], y=[y1], mode='markers', marker=dict(color='green'), showlegend=False))
+
+    # 最小距離のペア間に青い線を引く
+    fig_min_distance.add_trace(go.Scatter(x=[x0, x1], y=[y0, y1], mode='lines', line=dict(color='blue'), showlegend=False))
+
+    add_annotation_to_plot(fig_min_distance)
+    fig_min_distance.update_layout(plot_bgcolor='white', paper_bgcolor='white')
+    pio.write_image(fig_min_distance, f"{save_dir}/img/min_distance_particles.png")
+
+    # Distance between Two Particlesの画像を保存
+    fig_distance = go.Figure(data=[go.Histogram(x=st.session_state.distances, histnorm='density', nbinsx=50, marker=dict(color='blue'))])
+    fig_distance.update_layout(title='Distance between Two Particles', xaxis_title='Distance', yaxis_title='Density', plot_bgcolor='white', paper_bgcolor='white')
+    fig_distance.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
+    pio.write_image(fig_distance, f"{save_dir}/img/distance_between_two_particles.png")
+
+    # Normalized Distance between Two Particlesの画像を保存
+    hist, bin_edges = np.histogram(st.session_state.distances, bins=50, density=True)
+    bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    normalized_hist = hist / bin_centers
+    r_list = np.linspace(0, 5, 500)
+
+    fig_normalized_distance = go.Figure(data=[go.Bar(x=bin_centers, y=normalized_hist, marker=dict(color='blue'))])
+    fig_normalized_distance.add_trace(go.Scatter(x=r_list, y=st.session_state.kappa_values, mode='lines', name='Kappa Values', line=dict(color='red')))
+    fig_normalized_distance.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
+    fig_normalized_distance.update_yaxes(range=[0, max(normalized_hist) * 1.1])
+    fig_normalized_distance.update_layout(title='Normalized Distance between Two Particles', xaxis_title='Distance', yaxis_title='Normalized Frequency', plot_bgcolor='white', paper_bgcolor='white')
+    pio.write_image(fig_normalized_distance, f"{save_dir}/img/normalized_distance_between_two_particles.png")
+
+    # acceptance_rateのプロットを保存
+    fig_acceptance_rate = go.Figure(data=go.Scatter(x=list(range(0, len(acceptance_rates))), y=acceptance_rates, line=dict(color='blue')))
+
+    mutations = list(range(0, len(acceptance_rates)))
+    mutations_text = [str((x + 1) * st.session_state.num_of_mutations) for x in mutations]
+
+    fig_acceptance_rate.update_xaxes(ticktext=mutations_text, tickvals=mutations)
+    fig_acceptance_rate.update_layout(title='Acceptance Rate over Mutations', xaxis_title='Mutations', yaxis_title='Acceptance Rate (%)', plot_bgcolor='white', paper_bgcolor='white')
+    pio.write_image(fig_acceptance_rate, f"{save_dir}/img/acceptance_rate.png")
+
+    # acceptance_rate_changeのプロットを保存
+    fig_acceptance_rate_change = go.Figure(data=go.Scatter(x=list(range(1, len(acceptance_rate_changes) + 1)), y=acceptance_rate_changes, line=dict(color='blue')))
+
+    mutations = list(range(1, len(acceptance_rate_changes) + 1))
+    mutations_text = [str((x + 1) * st.session_state.num_of_mutations) for x in mutations]
+
+    fig_acceptance_rate_change.update_xaxes(ticktext=mutations_text, tickvals=mutations)
+    fig_acceptance_rate_change.update_layout(title='Relative Change of Acceptance Rate over Mutations', xaxis_title='Mutations', yaxis_title='Relative Change (%)', plot_bgcolor='white', paper_bgcolor='white')
+    pio.write_image(fig_acceptance_rate_change, f"{save_dir}/img/acceptance_rate_change.png")
+
+    # パラメータと他の値を一つのJSONファイルに保存
+    results = {
+        "parameters": {
+            "num_of_particles": st.session_state.num_of_particles,
+            "target_distribution_name": st.session_state.target_distribution_name,
+            "a": st.session_state.a,
+            "b": st.session_state.b,
+            "c": st.session_state.c,
+            "s": st.session_state.s,
+            "proposal_std": st.session_state.proposal_std,
+            "r_threshold": st.session_state.r_threshold,
+            "num_of_chains": st.session_state.num_of_chains,
+            "num_of_iterations_for_each_chain": st.session_state.num_of_iterations_for_each_chain,
+            "num_of_mutations": st.session_state.num_of_mutations,
+            "scaling_factor": st.session_state.scaling_factor,
+            "geta": st.session_state.geta,
+            "burn_in_multiplier": st.session_state.burn_in_multiplier
+        },
+        "calc_time": st.session_state.calc_time,
+        "average_acceptance_ratio": st.session_state.average_acceptance_ratio,
+        "acceptance_rates": acceptance_rates,
+        "acceptance_rate_changes": acceptance_rate_changes
+    }
+    with open(f"{save_dir}/data/results.json", "w") as outfile:
+        json.dump(results, outfile, indent=4)
+
+    st.info(f"Results saved to {save_dir}")
 def main():
     st.title('Markov chain Monte Carlo Algorithm Sampling')
     initialize_parameters()
 
     if st.session_state.use_maximal_c:
         calculate_maximal_c()
+
+    if st.button('Calculate All Patterns'):
+        calculate_all_patterns()
 
     if st.button('Calculate'):
         log_flag, record_flag, use_metropolis_within_gibbs_flag = set_flags()
@@ -482,6 +635,8 @@ def main():
 
     if st.session_state.distances is not None:
         visualize_histogram()
+        if st.button('Save Results'):
+            save_results(f"Results/{st.session_state.target_distribution_name}/{format(datetime.datetime.now(), '%Y%m%d_%H%M%S')}")
 
 if __name__ == "__main__":
     main()
