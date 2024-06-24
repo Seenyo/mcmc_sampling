@@ -14,7 +14,7 @@ def load_json_files(directory):
             if file == "distances.json":
                 file_path = os.path.join(root, file)
                 parts = os.path.relpath(root, directory).split(os.path.sep)
-                if len(parts) >= 1:  # parts[0]が必要な情報を含むと仮定
+                if len(parts) >= 1:
                     num_particles, num_chains = parts[0].split('_')
                     if num_particles not in data:
                         data[num_particles] = {}
@@ -63,16 +63,25 @@ def calculate_distances(distancesA, distancesB):
         'Earth Mover Distance': emd,
     }
 
+def format_x_values(x_values):
+    formatted_x_values = []
+    for i in range(len(x_values)):
+        if i == 0:
+            formatted_x_values.append(f"{int(int(x_values[i])/10)}_{x_values[i]}")
+        else:
+            formatted_x_values.append(f"{x_values[i-1]}_{x_values[i]}")
+    return formatted_x_values
 
 # データをプロットする関数
 def plot_comparative_distances(results):
     for num_particles, data in results.items():
         fig = go.Figure()
         x_values = list(data.keys())
+        formatted_x_values = format_x_values(x_values)
         for metric in data[x_values[0]].keys():
             y_values = [data[x][metric] for x in x_values]
             fig.add_trace(go.Scatter(
-                x=x_values,
+                x=formatted_x_values,
                 y=y_values,
                 mode='lines+markers',
                 name=metric
