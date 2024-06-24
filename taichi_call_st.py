@@ -181,20 +181,8 @@ def calculate_kappa005(r_list, scaling_factor, geta):
             kappa_values.append(scaling_factor * (-1 * np.exp(-5*(r_list[i]-0.05)) * np.cos(22*(r_list[i]-0.05))) + scaling_factor)
     return kappa_values
 
-def visualize_histogram():
+def visualize_histogram(visualize=True):
     if st.session_state.distances is not None:
-        # Display the histogram with go
-        # Display as a density plot
-        # fig = go.Figure(data=[go.Histogram(x=st.session_state.distances, histnorm='density', nbinsx=50)])
-        # fig.update_layout(title='Distance between Two Particles', xaxis_title='Distance', yaxis_title='Density')
-        # fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
-        # st.plotly_chart(fig, theme=None)
-        #
-        # # Normalize the histogram as a density plot
-        # hist, bin_edges = np.histogram(st.session_state.distances, bins=50, density=True)
-        # bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
-        #
-        # normalized_hist = hist / bin_centers
 
         # calculate kappa value
         sin_ab = np.sin(st.session_state.a * st.session_state.b)
@@ -205,50 +193,62 @@ def visualize_histogram():
 
         r_list = np.linspace(0, 5, 500)
 
-        if (st.session_state.scaling_factor != st.session_state.prev_scaling_factor) or (st.session_state.geta != st.session_state.prev_geta):
-            if st.session_state.target_distribution_name == 'target_distribution' or st.session_state.target_distribution_name == 'target_distribution2':
-                numerator = 2 * ((1 - 3 * st.session_state.a ** 2) * sin_ab + st.session_state.a * (st.session_state.a ** 2 - 3) * cos_ab)
-                denominator = (st.session_state.a ** 2 + 1) ** 3
-                st.session_state.c_ab_val = -1 * numerator / denominator
-                st.session_state.kappa_values = calculate_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
-            elif st.session_state.target_distribution_name == 'target_distribution3':
-                numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a**2) * sin_ab
-                denominator = (1 + st.session_state.a ** 2) ** 2
-                st.session_state.c_ab_val = numerator / denominator
-                st.session_state.geta = st.session_state.scaling_factor
-                st.session_state.kappa_values = calculate_kappa2(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
-            elif st.session_state.target_distribution_name == 'target_distribution4':
-                numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a ** 2) * sin_ab
-                denominator = (1 + st.session_state.a ** 2) ** 2
-                st.session_state.c_ab_val = numerator / denominator
-                st.session_state.kappa_values = calculate_kappa2(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
-            elif st.session_state.target_distribution_name == 'target_distribution5':
-                a_squared_plus_one = st.session_state.a ** 2 + 1
-                b_plus_one = st.session_state.b + 1
-                b_minus_one = st.session_state.b - 1
+        if st.session_state.target_distribution_name == 'target_distribution' or st.session_state.target_distribution_name == 'target_distribution2':
+            numerator = 2 * ((1 - 3 * st.session_state.a ** 2) * sin_ab + st.session_state.a * (st.session_state.a ** 2 - 3) * cos_ab)
+            denominator = (st.session_state.a ** 2 + 1) ** 3
+            st.session_state.c_ab_val = -1 * numerator / denominator
+            st.session_state.kappa_values = calculate_kappa(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
+        elif st.session_state.target_distribution_name == 'target_distribution3':
+            numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a**2) * sin_ab
+            denominator = (1 + st.session_state.a ** 2) ** 2
+            st.session_state.c_ab_val = numerator / denominator
+            st.session_state.geta = st.session_state.scaling_factor
+            st.session_state.kappa_values = calculate_kappa2(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
+        elif st.session_state.target_distribution_name == 'target_distribution4':
+            numerator = 2 * st.session_state.a * cos_ab - (1 - st.session_state.a ** 2) * sin_ab
+            denominator = (1 + st.session_state.a ** 2) ** 2
+            st.session_state.c_ab_val = numerator / denominator
+            st.session_state.kappa_values = calculate_kappa2(r_list, st.session_state.scaling_factor, st.session_state.c, st.session_state.s, st.session_state.a, st.session_state.b, st.session_state.c_ab_val, st.session_state.geta)
+        elif st.session_state.target_distribution_name == 'target_distribution5':
+            a_squared_plus_one = st.session_state.a ** 2 + 1
+            b_plus_one = st.session_state.b + 1
+            b_minus_one = st.session_state.b - 1
 
-                c_numer = (a_squared_plus_one ** 2) * (st.session_state.b ** 2 + 2 * st.session_state.b + 2)
-                c_denom = 2 * ((a_squared_plus_one ** 2) * b_plus_one - a_squared_plus_one * b_minus_one - 2)
-                c = c_numer / c_denom
-                Cab_1 = b_minus_one / (a_squared_plus_one * b_plus_one)
-                Cab_2 = 2 / (a_squared_plus_one ** 2 * b_plus_one)
-                Cab_3 = st.session_state.b ** 2 / (2 * b_plus_one * c)
-                Cab = Cab_1 + Cab_2 + Cab_3
-                st.session_state.kappa_values = calculate_kappa3(r_list, st.session_state.scaling_factor, st.session_state.a, st.session_state.b, c, Cab, st.session_state.geta)
-            elif st.session_state.target_distribution_name == 'target_distribution01':
-                st.session_state.kappa_values = calculate_kappa01(r_list, st.session_state.scaling_factor, st.session_state.geta)
-            elif st.session_state.target_distribution_name == 'target_distribution005':
-                st.session_state.kappa_values = calculate_kappa005(r_list, st.session_state.scaling_factor, st.session_state.geta)
+            c_numer = (a_squared_plus_one ** 2) * (st.session_state.b ** 2 + 2 * st.session_state.b + 2)
+            c_denom = 2 * ((a_squared_plus_one ** 2) * b_plus_one - a_squared_plus_one * b_minus_one - 2)
+            c = c_numer / c_denom
+            Cab_1 = b_minus_one / (a_squared_plus_one * b_plus_one)
+            Cab_2 = 2 / (a_squared_plus_one ** 2 * b_plus_one)
+            Cab_3 = st.session_state.b ** 2 / (2 * b_plus_one * c)
+            Cab = Cab_1 + Cab_2 + Cab_3
+            st.session_state.kappa_values = calculate_kappa3(r_list, st.session_state.scaling_factor, st.session_state.a, st.session_state.b, c, Cab, st.session_state.geta)
+        elif st.session_state.target_distribution_name == 'target_distribution01':
+            st.session_state.kappa_values = calculate_kappa01(r_list, st.session_state.scaling_factor, st.session_state.geta)
+        elif st.session_state.target_distribution_name == 'target_distribution005':
+            st.session_state.kappa_values = calculate_kappa005(r_list, st.session_state.scaling_factor, st.session_state.geta)
 
             st.session_state.prev_scaling_factor = st.session_state.scaling_factor
             st.session_state.prev_geta = st.session_state.geta
 
-        # fig = go.Figure(data=[go.Bar(x=bin_centers, y=normalized_hist)])
-        # fig.add_trace(go.Scatter(x=r_list, y=st.session_state.kappa_values, mode='lines', name='Kappa Values'))
-        # fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
-        # fig.update_yaxes(range=[0, max(normalized_hist) * 1.1])
-        # fig.update_layout(title='Normalized Distance between Two Particles', xaxis_title='Distance', yaxis_title='Normalized Frequency')
-        # st.plotly_chart(fig, theme=None)
+        if visualize:
+            # Display the histogram with go
+            # Display as a density plot
+            fig = go.Figure(data=[go.Histogram(x=st.session_state.distances, histnorm='density', nbinsx=50)])
+            fig.update_layout(title='Distance between Two Particles', xaxis_title='Distance', yaxis_title='Density')
+            fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
+            st.plotly_chart(fig, theme=None)
+
+            # Normalize the histogram as a density plot
+            hist, bin_edges = np.histogram(st.session_state.distances, bins=50, density=True)
+            bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+
+            normalized_hist = hist / bin_centers
+            fig = go.Figure(data=[go.Bar(x=bin_centers, y=normalized_hist)])
+            fig.add_trace(go.Scatter(x=r_list, y=st.session_state.kappa_values, mode='lines', name='Kappa Values'))
+            fig.update_xaxes(range=[st.session_state.r_threshold, max(st.session_state.distances)])
+            fig.update_yaxes(range=[0, max(normalized_hist) * 1.1])
+            fig.update_layout(title='Normalized Distance between Two Particles', xaxis_title='Distance', yaxis_title='Normalized Frequency')
+            st.plotly_chart(fig, theme=None)
 
 @st.cache_data
 def calculate_min_distance(result_particles):
@@ -409,7 +409,7 @@ def visualize_particles():
             image_index = draw_particles(data_index, colors_index, filename, save=st.session_state.save_image)
             st.image(image_index)
 
-def visualize_acceptance_rate():
+def visualize_acceptance_rate(visualize=True):
     if os.path.exists('temp_folder/acceptance_rate.txt'):
         global acceptance_rates
         acceptance_rates = []
@@ -417,17 +417,18 @@ def visualize_acceptance_rate():
             for line in f:
                 acceptance_rates.append(float(line.strip()))
 
-        # mutations = list(range(1, len(acceptance_rates) + 1))
-        # mutations = [x * st.session_state.num_of_mutations for x in mutations]
+        if visualize:
+            mutations = list(range(1, len(acceptance_rates) + 1))
+            mutations = [x * st.session_state.num_of_mutations for x in mutations]
 
-        # fig = go.Figure(data=go.Scatter(x=mutations, y=acceptance_rates))
-        # fig.update_layout(title='Acceptance Rate over Mutations',
-        #                   xaxis_title='Mutations',
-        #                   yaxis_title='Acceptance Rate (%)')
-        # st.plotly_chart(fig, theme=None)
+            fig = go.Figure(data=go.Scatter(x=mutations, y=acceptance_rates))
+            fig.update_layout(title='Acceptance Rate over Mutations',
+                              xaxis_title='Mutations',
+                              yaxis_title='Acceptance Rate (%)')
+            st.plotly_chart(fig, theme=None)
 
 
-def visualize_acceptance_rate_change():
+def visualize_acceptance_rate_change(visualize=True):
     if os.path.exists('temp_folder/acceptance_rate_change.txt'):
         global acceptance_rate_changes
         acceptance_rate_changes = []
@@ -435,14 +436,15 @@ def visualize_acceptance_rate_change():
             for line in f:
                 acceptance_rate_changes.append(float(line.strip()))
 
-        # mutations = list(range(2, len(acceptance_rate_changes) + 2))
-        # mutations = [x * st.session_state.num_of_mutations for x in mutations]
+        if visualize:
+            mutations = list(range(2, len(acceptance_rate_changes) + 2))
+            mutations = [x * st.session_state.num_of_mutations for x in mutations]
 
-        # fig = go.Figure(data=go.Scatter(x=mutations, y=acceptance_rate_changes))
-        # fig.update_layout(title='Relative Change of Acceptance Rate over Mutations',
-        #                   xaxis_title='Mutations',
-        #                   yaxis_title='Relative Change of Acceptance Rate (%)')
-        # st.plotly_chart(fig, theme=None)
+            fig = go.Figure(data=go.Scatter(x=mutations, y=acceptance_rate_changes))
+            fig.update_layout(title='Relative Change of Acceptance Rate over Mutations',
+                              xaxis_title='Mutations',
+                              yaxis_title='Relative Change of Acceptance Rate (%)')
+            st.plotly_chart(fig, theme=None)
 
 def set_flags():
     log_flag = "--acceptance_ratio_calculation_with_log" if st.session_state.acceptance_ratio_calculation_with_log else ""
@@ -452,10 +454,11 @@ def set_flags():
 def calculate_all_patterns():
     num_of_particles_list = [2, 5, 10, 15, 20, 30]
     num_of_mutations_list = [100, 1000, 10000, 100000]
-    use_metropolis_within_gibbs_list = [True]
+    use_metropolis_within_gibbs_list = [False, True]
     use_log_calculation_list = [True, False]
 
     total_iterations = len(use_log_calculation_list) * len(use_metropolis_within_gibbs_list) * len(num_of_particles_list) * len(num_of_mutations_list)
+    time_stamp = format(datetime.datetime.now(), '%Y%m%d_%H%M%S')
 
     with stqdm(total=total_iterations, desc="Progress") as pbar:
         for use_log_calculation in use_log_calculation_list:
@@ -490,12 +493,45 @@ def calculate_all_patterns():
                         load_data()
                         method = "MWG" if use_metropolis_within_gibbs else "MH"
                         log_calculation = "Log" if use_log_calculation else "Normal"
-                        save_dir = f"patern_results/{st.session_state.target_distribution_name}/{method}_{log_calculation}/{num_of_particles}_{num_of_mutations}"
-                        visualize_acceptance_rate()
-                        visualize_acceptance_rate_change()
-                        visualize_histogram()
+                        save_dir = f"patern_results/{st.session_state.target_distribution_name}/{time_stamp}/{method}_{log_calculation}/{num_of_particles}_{num_of_mutations}"
+                        visualize_acceptance_rate(False)
+                        visualize_acceptance_rate_change(False)
+                        visualize_histogram(False)
                         save_results(save_dir)
                         pbar.update(1)
+
+
+def save_histogram_data(save_dir, data, filename, bin_counts):
+    histogram_data = {}
+    for bins in bin_counts:
+        hist, bin_edges = np.histogram(data, bins=bins, density=True)
+        bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+        histogram_data[bins] = {
+            "bin_centers": bin_centers.tolist(),
+            "hist_values": hist.tolist()
+        }
+
+    with open(f"{save_dir}/data/{filename}", "w") as outfile:
+        json.dump(histogram_data, outfile, indent=4)
+
+
+def save_distance_data(save_dir):
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    # 距離データを保存
+    distances = st.session_state.distances
+
+    # 値が小さい順にソート
+    distances = np.sort(distances)
+
+    with open(f"{save_dir}/data/distances.json", "w") as outfile:
+        json.dump(distances.tolist(), outfile, indent=4)
+
+    # ヒストグラムデータを保存
+    bin_counts = [50, 100, 500]
+    save_histogram_data(save_dir, distances, "histogram_distances.json", bin_counts)
+
 
 def save_results(save_dir):
     if not os.path.exists(save_dir):
@@ -531,6 +567,9 @@ def save_results(save_dir):
     bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
     normalized_hist = hist / bin_centers
     r_list = np.linspace(0, 5, 500)
+
+    # 距離データとヒストグラムデータを保存
+    save_distance_data(save_dir)
 
     fig_normalized_distance = go.Figure(data=[go.Bar(x=bin_centers, y=normalized_hist, marker=dict(color='blue'))])
     fig_normalized_distance.add_trace(go.Scatter(x=r_list, y=st.session_state.kappa_values, mode='lines', name='Kappa Values', line=dict(color='red')))
