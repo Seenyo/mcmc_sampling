@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from scipy.stats import entropy, wasserstein_distance, ks_2samp, anderson_ksamp
 from scipy.spatial.distance import jensenshannon
 
+
 # ディレクトリ内のJSONファイルを読み込む関数
 def load_json_files(directory):
     data = {}
@@ -22,20 +23,14 @@ def load_json_files(directory):
                         data[num_particles][num_chains] = json.load(f)
     return data
 
+
 # 分布間の距離を計算する関数
 def calculate_distances(distancesA, distancesB):
-
     if len(distancesA) != len(distancesB):
         return {
             'KL Divergence': np.nan,
             'Earth Mover Distance': np.nan,
-            'Jensen-Shannon Distance': np.nan,
-            'Hellinger Distance': np.nan,
             'Bhattacharyya Distance': np.nan,
-            'Kolmogorov-Smirnov Statistic': np.nan,
-            'Kolmogorov-Smirnov p-value': np.nan,
-            'Anderson-Darling Statistic': np.nan,
-            'Anderson-Darling p-value': np.nan
         }
 
     n = len(distancesA)
@@ -48,8 +43,8 @@ def calculate_distances(distancesA, distancesB):
 
     bin_centers = (bin_edgesA[:-1] + bin_edgesA[1:]) / 2
 
-    normalized_histA = histA / bin_centers
-    normalized_histB = histB / bin_centers
+    normalized_histA = histA / np.sum(histA)
+    normalized_histB = histB / np.sum(histB)
 
     # ゼロ確率を避けるため小さな値を足す
     normalized_histA += 1e-10
@@ -58,19 +53,25 @@ def calculate_distances(distancesA, distancesB):
     kl_divergence = entropy(normalized_histA, normalized_histB)
     emd = wasserstein_distance(bin_centers, bin_centers, normalized_histA, normalized_histB)
 
+    # バタチャリヤ距離の計算
+    bhattacharyya_dist = -np.log(np.sum(np.sqrt(normalized_histA * normalized_histB)))
+
     return {
         'KL Divergence': kl_divergence,
         'Earth Mover Distance': emd,
+        'Bhattacharyya Distance': bhattacharyya_dist,
     }
+
 
 def format_x_values(x_values):
     formatted_x_values = []
     for i in range(len(x_values)):
         if i == 0:
-            formatted_x_values.append(f"{int(int(x_values[i])/10)}_{x_values[i]}")
+            formatted_x_values.append(f"{int(int(x_values[i]) / 10)}_{x_values[i]}")
         else:
-            formatted_x_values.append(f"{x_values[i-1]}_{x_values[i]}")
+            formatted_x_values.append(f"{x_values[i - 1]}_{x_values[i]}")
     return formatted_x_values
+
 
 # データをプロットする関数
 def plot_comparative_distances(results):
