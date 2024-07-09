@@ -3,9 +3,17 @@ import os
 import json
 import numpy as np
 import plotly.graph_objects as go
-from scipy.stats import entropy, wasserstein_distance, ks_2samp, anderson_ksamp
-from scipy.spatial.distance import jensenshannon
+from scipy.stats import entropy, wasserstein_distance
 
+def calc_kl_divergence(p, q):
+    p = np.asarray(p, dtype=float)
+    q = np.asarray(q, dtype=float)
+
+    # Adding a small value to avoid division by zero
+    q = np.where(q == 0, 1e-10, q)
+    p = np.where(p == 0, 1e-10, p)
+
+    return np.sum(p * np.log(p / q))
 
 # ディレクトリ内のJSONファイルを読み込む関数
 def load_json_files(directory):
@@ -38,13 +46,16 @@ def calculate_distances(distancesA, distancesB):
     # rice's ruleでビン数を決定
     bins = int(np.ceil(2 * n ** (1 / 3)))
 
-    histA, bin_edgesA = np.histogram(distancesA, bins=bins, density=True, range=(0, 1))
-    histB, bin_edgesB = np.histogram(distancesB, bins=bins, density=True, range=(0, 1))
+    histA, bin_edgesA = np.histogram(distancesA, bins=bins, density=True, range=(0, 0.8))
+    histB, bin_edgesB = np.histogram(distancesB, bins=bins, density=True, range=(0, 0.8))
 
     bin_centers = (bin_edgesA[:-1] + bin_edgesA[1:]) / 2
 
-    normalized_histA = histA / np.sum(histA)
-    normalized_histB = histB / np.sum(histB)
+    adjusted_histA = histA / bin_centers
+    adjusted_histB = histB / bin_centers
+
+    normalized_histA = adjusted_histA / np.sum(adjusted_histA)
+    normalized_histB = adjusted_histB / np.sum(adjusted_histB)
 
     # ゼロ確率を避けるため小さな値を足す
     normalized_histA += 1e-10
@@ -72,15 +83,13 @@ def format_x_values(x_values):
             formatted_x_values.append(f"{x_values[i - 1]}_{x_values[i]}")
     return formatted_x_values
 
-
-# データをプロットする関数
-def plot_comparative_distances(results):
-    for num_particles, data in results.items():
+def plot_original_distances(results):
+    for num_particles in sorted(results.keys(), key=int):
         fig = go.Figure()
-        x_values = list(data.keys())
+        x_values = list(results[num_particles].keys())
         formatted_x_values = format_x_values(x_values)
-        for metric in data[x_values[0]].keys():
-            y_values = [data[x][metric] for x in x_values]
+        for metric in results[num_particles][x_values[0]].keys():
+            y_values = [results[num_particles][x][metric] for x in x_values]
             fig.add_trace(go.Scatter(
                 x=formatted_x_values,
                 y=y_values,
@@ -97,10 +106,38 @@ def plot_comparative_distances(results):
         )
         st.plotly_chart(fig)
 
+def plot_comparative_distances(results):
+    metrics = ['KL Divergence', 'Earth Mover Distance', 'Bhattacharyya Distance']
+    for metric in metrics:
+        fig = go.Figure()
+        for num_particles in sorted(results.keys(), key=int):
+            data = results[num_particles]
+            x_values = list(data.keys())
+            formatted_x_values = format_x_values(x_values)
+            y_values = [data[x][metric] for x in x_values]
+            fig.add_trace(go.Scatter(
+                x=formatted_x_values,
+                y=y_values,
+                mode='lines+markers',
+                name=f"{num_particles} Particles"
+            ))
+
+        fig.update_layout(
+            title=f'Comparative {metric}',
+            xaxis_title='Mutation Stride',
+            yaxis_title='Distance',
+            template='plotly_white',
+            legend_title='Number of Particles'
+        )
+
+        # y-rangeを固定
+        fig.update_yaxes(range=[0, 0.02])
+        st.plotly_chart(fig)
+
 
 def main():
     st.title("Comprehensive Distribution Distance Visualization")
-    default_dir = st.sidebar.text_input("Enter the default directory path:", "patern_results/target_distribution5/20240624_134648")
+    default_dir = st.sidebar.text_input("Enter the default directory path:", "patern_results/target_distribution5/20240624_134648/MH_Normal")
 
     if not os.path.exists(default_dir):
         st.error(f"Directory {default_dir} does not exist.")
@@ -117,6 +154,7 @@ def main():
             distancesB = values[strides[i + 1]]
             results[num_particles][strides[i + 1]] = calculate_distances(distancesA, distancesB)
 
+    plot_original_distances(results)
     plot_comparative_distances(results)
 
 

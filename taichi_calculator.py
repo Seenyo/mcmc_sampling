@@ -787,6 +787,8 @@ def calculate_distances():
     min_distance_particles = None
     min_distance_pair = None
 
+    print(f'len(result_particles): {len(result_particles)}')
+
     for i in range(len(result_particles)):
         for j in range(len(result_particles[i])):
             dist = toroidal_distance(1.0, result_particles[i][j][0], result_particles[i][j][1])

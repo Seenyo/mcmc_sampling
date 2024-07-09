@@ -13,6 +13,15 @@ st.sidebar.header("Upload your JSON files")
 uploaded_fileA = st.sidebar.file_uploader("Upload distancesA.json", type="json")
 uploaded_fileB = st.sidebar.file_uploader("Upload distancesB.json", type="json")
 
+def calc_kl_divergence(p, q):
+    p = np.asarray(p, dtype=float)
+    q = np.asarray(q, dtype=float)
+
+    # Adding a small value to avoid division by zero
+    q = np.where(q == 0, 1e-10, q)
+    p = np.where(p == 0, 1e-10, p)
+
+    return np.sum(p * np.log(p / q))
 # ヘリンガー距離の計算関数
 def hellinger_distance(p, q):
     return np.sqrt(np.sum((np.sqrt(p) - np.sqrt(q)) ** 2)) / np.sqrt(2)
@@ -41,15 +50,24 @@ if uploaded_fileA is not None and uploaded_fileB is not None:
 
         bin_centers = (bin_edgesA[:-1] + bin_edgesA[1:]) / 2
 
-        normalized_histA = histA / bin_centers
-        normalized_histB = histB / bin_centers
+        adjusted_histA = histA / bin_centers
+        adjusted_histB = histB / bin_centers
+
+        normalized_histA = adjusted_histA / np.sum(adjusted_histA)
+        normalized_histB = adjusted_histB / np.sum(adjusted_histB)
 
         # ゼロ確率を避けるため小さな値を足す
         normalized_histA += 1e-10
         normalized_histB += 1e-10
 
+        # 正しく正規化できているかを確認
+        st.info(f"Sum of normalized_histA: {np.sum(normalized_histA)}")
+
         # 各距離の計算
+        kl_divergence_hands = calc_kl_divergence(normalized_histA, normalized_histB)
         kl_divergence = entropy(normalized_histA, normalized_histB)
+        st.info(f"KL Divergence by hand: {kl_divergence_hands}")
+        st.info(f"KL Divergence by scipy: {kl_divergence}")
         emd = wasserstein_distance(bin_centers, bin_centers, normalized_histA, normalized_histB)
         js_distance = jensenshannon(normalized_histA, normalized_histB)
         hellinger_dist = hellinger_distance(normalized_histA, normalized_histB)
